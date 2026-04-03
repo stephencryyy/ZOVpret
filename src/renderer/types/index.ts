@@ -21,11 +21,13 @@ export interface Strategy {
   category: 'general' | 'alt' | 'fake_tls' | 'simple_fake' | 'custom'
 }
 
-/** Результат тестирования стратегии */
-export interface StrategyTestResult {
-  strategyId: string
+/** Результат Smart Start */
+export interface SmartStartResult {
   success: boolean
-  latencyMs: number
+  strategy?: {
+    id: string
+    name: string
+  }
   error?: string
 }
 
@@ -47,21 +49,13 @@ export interface LogEntry {
 
 /** Настройки приложения */
 export interface AppConfig {
-  /** Последняя рабочая стратегия */
   lastStrategyId: string | null
-  /** Режим фильтрации: hostlist или all */
   filterMode: 'hostlist' | 'all'
-  /** Автообновление бинарников */
   autoUpdate: boolean
-  /** Версия бинарников */
   binVersion: string | null
-  /** Пользовательские домены */
   customDomains: string[]
-  /** Автозапуск при старте приложения */
   autoStart: boolean
-  /** Запускаться свёрнутым */
   startMinimized: boolean
-  /** Уровень логирования */
   logLevel: 'info' | 'debug'
 }
 
@@ -77,12 +71,13 @@ export interface UpdateInfo {
 /** IPC API, доступное из renderer */
 export interface ZovpretAPI {
   // Управление движком
-  startEngine: () => Promise<void>
-  stopEngine: () => Promise<void>
+  startEngine: (strategyId?: string) => Promise<any>
+  stopEngine: () => Promise<any>
   getEngineState: () => Promise<EngineState>
 
   // Smart Start
-  runSmartStart: () => Promise<StrategyTestResult>
+  runSmartStart: () => Promise<SmartStartResult>
+  abortSmartStart: () => Promise<void>
 
   // Настройки
   getConfig: () => Promise<AppConfig>
@@ -94,12 +89,18 @@ export interface ZovpretAPI {
 
   // Обновления
   checkUpdate: () => Promise<UpdateInfo>
-  performUpdate: () => Promise<void>
+  performUpdate: () => Promise<any>
+  areBinariesInstalled: () => Promise<boolean>
+
+  // Окно
+  minimizeWindow: () => void
+  closeWindow: () => void
 
   // Подписка на события
-  onStatusChange: (callback: (status: ConnectionStatus) => void) => () => void
+  onStatusChange: (callback: (status: string) => void) => () => void
   onLog: (callback: (entry: LogEntry) => void) => () => void
   onSmartStartProgress: (callback: (data: { current: number; total: number; strategyName: string }) => void) => () => void
+  onUpdateProgress: (callback: (message: string) => void) => () => void
 }
 
 declare global {

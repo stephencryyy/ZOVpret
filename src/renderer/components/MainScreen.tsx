@@ -1,8 +1,6 @@
 // ============================================================================
 // MainScreen — Главный экран приложения
 // ============================================================================
-// Собирает PowerButton, StatusIndicator и Info-карточки в единый layout.
-// ============================================================================
 
 import React from 'react'
 import PowerButton from './PowerButton'
@@ -14,6 +12,7 @@ interface MainScreenProps {
   status: Status
   strategyName: string | null
   uptime: number
+  errorMessage?: string | null
   onToggle: () => void
   smartStartProgress?: {
     current: number
@@ -22,7 +21,6 @@ interface MainScreenProps {
   } | null
 }
 
-/** Форматировать аптайм из мс в HH:MM:SS */
 function formatUptime(ms: number): string {
   if (ms <= 0) return '00:00:00'
   const totalSecs = Math.floor(ms / 1000)
@@ -36,6 +34,7 @@ const MainScreen: React.FC<MainScreenProps> = ({
   status,
   strategyName,
   uptime,
+  errorMessage,
   onToggle,
   smartStartProgress
 }) => {
@@ -43,21 +42,19 @@ const MainScreen: React.FC<MainScreenProps> = ({
 
   return (
     <div className="main-content">
-      {/* Статус */}
       <StatusIndicator
         status={status}
         strategyName={strategyName}
+        errorMessage={errorMessage}
         smartStartProgress={smartStartProgress}
       />
 
-      {/* Центральная кнопка */}
       <PowerButton
         status={status}
         onClick={onToggle}
         disabled={isDisabled}
       />
 
-      {/* Информационные карточки */}
       <div className="info-cards fade-in">
         <div className="info-card">
           <div className="info-card__label">Аптайм</div>

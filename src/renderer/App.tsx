@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [smartStartProgress, setSmartStartProgress] = useState<SmartStartProgress | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const uptimeIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = useRef<number>(0)
@@ -82,8 +83,8 @@ const App: React.FC = () => {
       // (каждая неудачная стратегия эмитит error, но это нормально)
       if (isSmartStartRunningRef.current) {
         if (newStatus === 'connected') {
-          // Стратегия сработала! Обновляем UI
           setStatus('connected')
+          setErrorMessage(null)
           startTimeRef.current = Date.now()
           uptimeIntervalRef.current = setInterval(() => {
             setUptime(Date.now() - startTimeRef.current)
@@ -96,11 +97,18 @@ const App: React.FC = () => {
       setStatus(newStatus as Status)
 
       if (newStatus === 'connected') {
+        setErrorMessage(null)
         startTimeRef.current = Date.now()
         uptimeIntervalRef.current = setInterval(() => {
           setUptime(Date.now() - startTimeRef.current)
         }, 1000)
-      } else if (newStatus === 'disconnected' || newStatus === 'error') {
+      } else if (newStatus === 'disconnected') {
+        setErrorMessage(null)
+        if (uptimeIntervalRef.current) {
+          clearInterval(uptimeIntervalRef.current)
+          uptimeIntervalRef.current = null
+        }
+      } else if (newStatus === 'error') {
         if (uptimeIntervalRef.current) {
           clearInterval(uptimeIntervalRef.current)
           uptimeIntervalRef.current = null
@@ -112,6 +120,20 @@ const App: React.FC = () => {
 
     const unsubLog = window.api?.onLog?.((entry: LogEntry) => {
       setLogs(prev => [...prev.slice(-499), entry])
+
+      // Автоматически распознаём ошибки и показываем на главном экране
+      if (entry.level === 'error' && entry.message) {
+        const msg = entry.message
+        if (msg.includes('администратора') || msg.includes('EACCES') || msg.includes('EPERM')) {
+          setErrorMessage('⚠ Требуются права администратора. Запустите приложение от имени администратора (Run as Administrator).')
+        } else if (msg.includes('не найден') || msg.includes('not found')) {
+          setErrorMessage('📦 Бинарники zapret не найдены. Нажмите «↻ Обновить» для скачивания.')
+        } else if (msg.includes('перезапуск')) {
+          setErrorMessage('🔄 Стратегия завершилась. Попробуйте другую стратегию в настройках.')
+        } else if (!errorMessage) {
+          setErrorMessage(`Ошибка: ${msg.substring(0, 100)}`)
+        }
+      }
     })
 
     const unsubProgress = window.api?.onSmartStartProgress?.((data: any) => {
@@ -143,6 +165,7 @@ const App: React.FC = () => {
         setStatus('disconnected')
         setStrategyName(null)
         setSmartStartProgress(null)
+        setErrorMessage(null)
       } else {
         // Проверяем наличие бинарников, если нет — качаем автоматически
         const binInstalled = await window.api?.areBinariesInstalled?.()
@@ -187,12 +210,14 @@ const App: React.FC = () => {
           } else {
             setStatus('error')
             setSmartStartProgress(null)
+            setErrorMessage('Ни одна стратегия не сработала. Попробуйте выбрать стратегию вручную в настройках.')
           }
         }
       }
     } catch (err) {
       console.error('Toggle error:', err)
       isSmartStartRunningRef.current = false
+      setErrorMessage(`Не удалось запустить: ${(err as Error)?.message || 'неизвестная ошибка'}`)
       setStatus('error')
     }
   }, [status, currentStrategyId, strategies])
@@ -214,6 +239,7 @@ const App: React.FC = () => {
         status={status}
         strategyName={strategyName}
         uptime={uptime}
+        errorMessage={errorMessage}
         onToggle={handleToggle}
         smartStartProgress={smartStartProgress}
       />

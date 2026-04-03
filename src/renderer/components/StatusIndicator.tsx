@@ -9,6 +9,7 @@ type Status = 'disconnected' | 'analyzing' | 'connecting' | 'connected' | 'error
 interface StatusIndicatorProps {
   status: Status
   strategyName: string | null
+  errorMessage?: string | null
   smartStartProgress?: {
     current: number
     total: number
@@ -27,6 +28,7 @@ const STATUS_LABELS: Record<Status, string> = {
 const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   status,
   strategyName,
+  errorMessage,
   smartStartProgress
 }) => {
   return (
@@ -35,6 +37,24 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       <div className={`status-text status-text--${status}`}>
         {STATUS_LABELS[status]}
       </div>
+
+      {/* Понятное сообщение об ошибке */}
+      {status === 'error' && errorMessage && (
+        <div style={{
+          marginTop: '8px',
+          padding: '10px 16px',
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
+          borderRadius: '8px',
+          fontSize: '12px',
+          color: '#fca5a5',
+          lineHeight: 1.5,
+          textAlign: 'center',
+          maxWidth: '320px'
+        }}>
+          {errorMessage}
+        </div>
+      )}
 
       {/* Бейдж стратегии при подключении */}
       {status === 'connected' && strategyName && (
