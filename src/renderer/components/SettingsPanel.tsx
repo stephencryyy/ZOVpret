@@ -2,7 +2,8 @@
 // SettingsPanel — Slide-in панель настроек
 // ============================================================================
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
+import { ChevronLeft, Settings2, Target, List, Info, Ghost, Zap, Shuffle } from 'lucide-react'
 
 interface Strategy {
   id: string
@@ -35,11 +36,22 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`
   }
 
+  // Категории с иконками Lucide
+  const CategoryIcon = ({ category }: { category: string }) => {
+    switch (category) {
+      case 'general': return <Target size={14} />
+      case 'alt': return <Shuffle size={14} />
+      case 'fake_tls': return <Ghost size={14} />
+      case 'simple_fake': return <Zap size={14} />
+      default: return <List size={14} />
+    }
+  }
+
   const categoryLabels: Record<string, string> = {
-    general: '📡 Базовые',
-    alt: '🔀 Альтернативные',
-    fake_tls: '🎭 Fake TLS',
-    simple_fake: '⚡ Простые'
+    general: 'Базовые',
+    alt: 'Альтернативные',
+    fake_tls: 'Fake TLS',
+    simple_fake: 'Простые'
   }
 
   // Группируем стратегии по категориям
@@ -61,9 +73,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       <div className={`settings-panel ${isOpen ? 'settings-panel--open' : ''}`}>
         <div className="settings-header">
           <button className="settings-header__back" onClick={onClose}>
-            ← Назад
+            <ChevronLeft size={16} /> Назад
           </button>
-          <span className="settings-header__title">⚙ Настройки</span>
+          <span className="settings-header__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Settings2 size={16} /> Настройки
+          </span>
           <div style={{ width: '80px' }} />
         </div>
 
@@ -89,11 +103,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 fontSize: '12px',
                 fontWeight: 600,
                 transition: 'all 0.2s ease',
-                borderRadius: '6px 6px 0 0'
+                borderRadius: '6px 6px 0 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}
             >
-              {tab === 'strategies' ? '🎯 Стратегии' :
-               tab === 'logs' ? '📋 Логи' : 'ℹ️ О программе'}
+              {tab === 'strategies' ? <><Target size={14}/> Профили</> :
+               tab === 'logs' ? <><List size={14}/> Логи</> : <><Info size={14}/> Инфо</>}
             </button>
           ))}
         </div>
@@ -103,13 +120,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           {activeTab === 'strategies' && (
             <>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Выберите стратегию обхода DPI. При нажатии START с выбранной стратегией,
-                она будет использована напрямую. Нажмите START без выбора для автоподбора (Smart Start).
+                Выберите профиль обхода пакетов. Если профиль не выбран, приложение попытается автоматически подобрать оптимальный (Smart Start).
               </div>
 
               {Object.entries(grouped).map(([category, items]) => (
                 <div className="settings-section" key={category}>
-                  <div className="settings-section__title">
+                  <div className="settings-section__title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CategoryIcon category={category} />
                     {categoryLabels[category] || category}
                   </div>
                   {items.map(strategy => (
@@ -128,7 +145,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         currentStrategyId === strategy.id ? 'settings-item__check--active' : ''
                       }`}>
                         {currentStrategyId === strategy.id && (
-                          <span style={{ color: '#0a0a0f', fontSize: '10px', fontWeight: 900 }}>✓</span>
+                          <span style={{ color: '#020205', fontSize: '10px', fontWeight: 900 }}>✓</span>
                         )}
                       </div>
                     </div>
@@ -143,7 +160,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <div className="log-viewer" style={{ maxHeight: '100%', flex: 1 }}>
               {logs.length === 0 && (
                 <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
-                  Логи пусты. Запустите обход для появления записей.
+                  Терминал пуст. Логи появятся после запуска движка.
                 </div>
               )}
               {logs.slice(-200).map((entry, i) => (
@@ -170,19 +187,20 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   justifyContent: 'center',
                   fontSize: '20px',
                   fontWeight: 900,
-                  marginBottom: '12px'
+                  marginBottom: '12px',
+                  color: '#fff'
                 }}>Z</div>
                 <div style={{ fontSize: '18px', fontWeight: 800 }}>ZOVpret</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  v1.0.0 — Расширенная GUI-оболочка для zapret
+                  v1.0.0 — GUI Wrapper для zapret
                 </div>
               </div>
 
               <div className="settings-section">
-                <div className="settings-section__title">Источники</div>
+                <div className="settings-section__title">Компоненты</div>
                 <div className="settings-item" style={{ cursor: 'default' }}>
                   <div className="settings-item__left">
-                    <div className="settings-item__name">Движок</div>
+                    <div className="settings-item__name">Стратегии</div>
                     <div className="settings-item__desc">Flowseal/zapret-discord-youtube</div>
                   </div>
                 </div>
@@ -201,8 +219,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 lineHeight: 1.6,
                 marginTop: '8px'
               }}>
-                Это свободное ПО. Не является VPN/прокси.<br/>
-                Работает локально через WinDivert.
+                Это свободное программное обеспечение. Не является классическим VPN/прокси.<br/>
+                Модифицирует сетевые пакеты локально через WinDivert.
               </div>
             </div>
           )}

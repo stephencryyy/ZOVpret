@@ -3,6 +3,7 @@
 // ============================================================================
 
 import React from 'react'
+import { motion } from 'framer-motion'
 import PowerButton from './PowerButton'
 import StatusIndicator from './StatusIndicator'
 
@@ -30,6 +31,23 @@ function formatUptime(ms: number): string {
   return [h, m, s].map(n => n.toString().padStart(2, '0')).join(':')
 }
 
+// Framer Motion variants
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2
+    }
+  }
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
+}
+
 const MainScreen: React.FC<MainScreenProps> = ({
   status,
   strategyName,
@@ -41,7 +59,12 @@ const MainScreen: React.FC<MainScreenProps> = ({
   const isDisabled = status === 'connecting'
 
   return (
-    <div className="main-content">
+    <motion.div
+      className="main-content"
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+    >
       <StatusIndicator
         status={status}
         strategyName={strategyName}
@@ -49,33 +72,37 @@ const MainScreen: React.FC<MainScreenProps> = ({
         smartStartProgress={smartStartProgress}
       />
 
-      <PowerButton
-        status={status}
-        onClick={onToggle}
-        disabled={isDisabled}
-      />
+      <motion.div variants={itemVariants}>
+        <PowerButton
+          status={status}
+          onClick={onToggle}
+          disabled={isDisabled}
+        />
+      </motion.div>
 
-      <div className="info-cards fade-in">
-        <div className="info-card">
+      <motion.div className="info-cards" variants={containerVariants}>
+        <motion.div className="info-card" variants={itemVariants}>
           <div className="info-card__label">Аптайм</div>
           <div className="info-card__value">
             {status === 'connected' ? formatUptime(uptime) : '—'}
           </div>
-        </div>
-        <div className="info-card">
+        </motion.div>
+        
+        <motion.div className="info-card" variants={itemVariants}>
           <div className="info-card__label">Стратегия</div>
           <div className="info-card__value" style={{ fontSize: '12px' }}>
             {strategyName || 'Авто'}
           </div>
-        </div>
-        <div className="info-card">
+        </motion.div>
+        
+        <motion.div className="info-card" variants={itemVariants}>
           <div className="info-card__label">Режим</div>
           <div className="info-card__value" style={{ fontSize: '12px' }}>
             Hostlist
           </div>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   )
 }
 

@@ -3,6 +3,7 @@
 // ============================================================================
 
 import React from 'react'
+import { Minus, X } from 'lucide-react'
 
 const TitleBar: React.FC = () => {
   const handleMinimize = () => {
@@ -26,14 +27,14 @@ const TitleBar: React.FC = () => {
           onClick={handleMinimize}
           title="Свернуть"
         >
-          ─
+          <Minus size={16} />
         </button>
         <button
           className="titlebar__btn titlebar__btn--close"
           onClick={handleClose}
           title="Закрыть"
         >
-          ✕
+          <X size={16} />
         </button>
       </div>
     </div>

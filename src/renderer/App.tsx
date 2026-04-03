@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import TitleBar from './components/TitleBar'
 import MainScreen from './components/MainScreen'
 import SettingsPanel from './components/SettingsPanel'
+import { Settings, RefreshCw } from 'lucide-react'
 
 type Status = 'disconnected' | 'analyzing' | 'connecting' | 'connected' | 'error'
 
@@ -125,11 +126,11 @@ const App: React.FC = () => {
       if (entry.level === 'error' && entry.message) {
         const msg = entry.message
         if (msg.includes('администратора') || msg.includes('EACCES') || msg.includes('EPERM')) {
-          setErrorMessage('⚠ Требуются права администратора. Запустите приложение от имени администратора (Run as Administrator).')
+          setErrorMessage('Требуются права администратора. Запустите приложение от имени администратора (Run as Administrator).')
         } else if (msg.includes('не найден') || msg.includes('not found')) {
-          setErrorMessage('📦 Бинарники zapret не найдены. Нажмите «↻ Обновить» для скачивания.')
+          setErrorMessage('Бинарные файлы zapret не найдены. Нажмите «Обновить» для скачивания.')
         } else if (msg.includes('перезапуск')) {
-          setErrorMessage('🔄 Стратегия завершилась. Попробуйте другую стратегию в настройках.')
+          setErrorMessage('Стратегия завершилась. Попробуйте выбрать другой профиль в настройках.')
         } else if (!errorMessage) {
           setErrorMessage(`Ошибка: ${msg.substring(0, 100)}`)
         }
@@ -249,7 +250,7 @@ const App: React.FC = () => {
           className="bottom-bar__btn"
           onClick={() => setSettingsOpen(true)}
         >
-          ⚙ Настройки
+          <Settings size={14} /> Настройки
         </button>
         <button
           className="bottom-bar__btn bottom-bar__btn--update"
@@ -262,7 +263,7 @@ const App: React.FC = () => {
             } catch { /* ignore */ }
           }}
         >
-          ↻ Обновить
+          <RefreshCw size={14} /> Обновить
         </button>
       </div>
 

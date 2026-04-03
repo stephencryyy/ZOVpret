@@ -16,9 +16,10 @@
     "lint": "eslint . --ext .ts,.tsx"
   },
   "dependencies": {
-    "electron-store": "^8.2.0",
     "adm-zip": "^0.5.16",
-    "framer-motion": "^11.18.0"
+    "electron-store": "^8.2.0",
+    "framer-motion": "^11.18.0",
+    "lucide-react": "^1.7.0"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -50,7 +51,9 @@
       {
         "from": "resources/",
         "to": "resources/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
