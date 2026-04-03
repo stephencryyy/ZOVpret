@@ -115,6 +115,9 @@ export class ZapretEngine extends EventEmitter {
 
     this.log('debug', `Команда: ${winwsPath} ${args.join(' ')}`)
 
+    // Флаг: процесс не смог запуститься (EACCES и т.п.)
+    let spawnFailed = false
+
     try {
       this.process = spawn(winwsPath, args, {
         cwd: this.binPath,
@@ -133,7 +136,16 @@ export class ZapretEngine extends EventEmitter {
       })
 
       this.process.on('error', (err) => {
-        this.log('error', `Ошибка процесса: ${err.message}`)
+        spawnFailed = true
+
+        if (err.message.includes('EACCES') || err.message.includes('EPERM')) {
+          this.log('error', '⚠ Нет прав администратора! Запустите приложение от имени администратора (Run as Administrator).')
+          this.log('error', 'WinDivert требует повышенных привилегий для перехвата трафика.')
+        } else {
+          this.log('error', `Ошибка процесса: ${err.message}`)
+        }
+
+        this.process = null
         this.setStatus('error')
       })
 
@@ -141,7 +153,7 @@ export class ZapretEngine extends EventEmitter {
         this.log('info', `Процесс завершён: code=${code}, signal=${signal}`)
         this.process = null
 
-        if (this._status !== 'stopping') {
+        if (this._status !== 'stopping' && !spawnFailed) {
           // Неожиданное завершение — попытка перезапуска
           if (this._restartCount < this._maxRestarts) {
             this._restartCount++
@@ -155,19 +167,23 @@ export class ZapretEngine extends EventEmitter {
             this.log('error', 'Превышено максимальное количество перезапусков')
             this.setStatus('error')
           }
-        } else {
+        } else if (this._status === 'stopping') {
           this.setStatus('stopped')
         }
       })
 
-      // Ждём 1 секунду и проверяем, что процесс не упал
+      // Ждём 1.5 сек и проверяем, что процесс реально работает
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          if (this.process && !this.process.killed) {
+          // Проверяем: процесс жив И PID существует И не было ошибки spawn
+          if (this.process && !this.process.killed && this.process.pid && !spawnFailed) {
             this._startTime = Date.now()
             this.setStatus('running')
             this.log('info', `✓ Стратегия "${strategy.name}" активна (PID: ${this.process.pid})`)
             resolve()
+          } else if (spawnFailed) {
+            // EACCES / EPERM — не пытаемся перезапускать
+            reject(new Error('Нет прав администратора для запуска winws.exe'))
           } else {
             reject(new Error('Процесс winws.exe завершился сразу после запуска'))
           }
@@ -175,8 +191,12 @@ export class ZapretEngine extends EventEmitter {
 
         this.process?.on('exit', () => {
           clearTimeout(timeout)
-          // exit обработает логику выше
           resolve()
+        })
+
+        this.process?.on('error', () => {
+          clearTimeout(timeout)
+          resolve() // Ошибка уже обработана в on('error')
         })
       })
     } catch (err: any) {
