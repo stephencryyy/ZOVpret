@@ -527,6 +527,29 @@ body {
   color: var(--text-primary);
 }
 
+.settings-header__back {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  padding: 6px 14px;
+  transition: all 0.2s ease;
+}
+
+.settings-header__back:hover {
+  background: rgba(0, 229, 255, 0.1);
+  border-color: rgba(0, 229, 255, 0.3);
+  color: var(--accent-primary);
+}
+
 .settings-body {
   flex: 1;
   overflow-y: auto;

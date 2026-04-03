@@ -60,37 +60,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       {/* Panel */}
       <div className={`settings-panel ${isOpen ? 'settings-panel--open' : ''}`}>
         <div className="settings-header">
-          <button
-            className="settings-header__back"
-            onClick={onClose}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 600,
-              fontFamily: 'var(--font-family)',
-              padding: '6px 14px',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(0, 229, 255, 0.1)'
-              e.currentTarget.style.borderColor = 'rgba(0, 229, 255, 0.3)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
-            }}
-          >
+          <button className="settings-header__back" onClick={onClose}>
             ← Назад
           </button>
           <span className="settings-header__title">⚙ Настройки</span>
-          <div style={{ width: '80px' }} /> {/* Spacer для центрирования заголовка */}
+          <div style={{ width: '80px' }} />
         </div>
 
         {/* Tabs */}
