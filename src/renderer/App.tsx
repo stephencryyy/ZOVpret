@@ -233,7 +233,7 @@ const App: React.FC = () => {
   // ─── Render ──────────────────────────────────────────────
   return (
     <div className="app-container">
-      <TitleBar onSettingsClick={() => setSettingsOpen(true)} />
+      <TitleBar />
 
       <MainScreen
         status={status}

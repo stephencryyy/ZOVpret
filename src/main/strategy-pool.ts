@@ -319,6 +319,83 @@ export const STRATEGIES: Strategy[] = [
       '--dpi-desync-fake-tls=0x00000000',
       '--dpi-desync-fake-tls-mod=rnd,rndsni,dupsid'
     ]
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // 8. INSTAGRAM / META — Оптимизировано под Instagram/Facebook
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: 'instagram_meta',
+    name: 'Instagram / Meta',
+    description: 'Оптимизировано для Instagram, Facebook, WhatsApp. Fake TLS с rndsni + autottl.',
+    category: 'general',
+    args: [
+      '--wf-tcp=80,443',
+      '--wf-udp=443',
+      // UDP: QUIC fake
+      '--filter-udp=443',
+      '--hostlist={LISTS}list-general.txt',
+      '--dpi-desync=fake',
+      '--dpi-desync-repeats=11',
+      '--dpi-desync-fake-quic={BIN}quic_initial_www_google_com.bin',
+      '--new',
+      // TCP: fake + multidisorder с rndsni (не нужны .bin файлы)
+      '--filter-tcp=443',
+      '--hostlist={LISTS}list-general.txt',
+      '--dpi-desync=fake,multidisorder',
+      '--dpi-desync-split-pos=1,midsld',
+      '--dpi-desync-repeats=11',
+      '--dpi-desync-fooling=badseq',
+      '--dpi-desync-fake-tls=0x00000000',
+      '--dpi-desync-fake-tls-mod=rnd,rndsni,dupsid',
+      '--dpi-desync-autottl=2',
+      '--new',
+      // HTTP (порт 80)
+      '--filter-tcp=80',
+      '--hostlist={LISTS}list-general.txt',
+      '--dpi-desync=fake,multidisorder',
+      '--dpi-desync-split-pos=1,host+1',
+      '--dpi-desync-repeats=6',
+      '--dpi-desync-fooling=badseq'
+    ]
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // 9. AGGRESSIVE — Максимальная совместимость
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: 'aggressive',
+    name: 'Aggressive',
+    description: 'Максимально агрессивная стратегия: все техники + высокий repeats. Может замедлить сеть.',
+    category: 'alt',
+    args: [
+      '--wf-tcp=80,443,2053,2083,2087,2096,8443',
+      '--wf-udp=443,19294-19344,50000-50100',
+      // UDP QUIC
+      '--filter-udp=443',
+      '--hostlist={LISTS}list-general.txt',
+      '--dpi-desync=fake',
+      '--dpi-desync-repeats=15',
+      '--dpi-desync-fake-quic={BIN}quic_initial_www_google_com.bin',
+      '--new',
+      // Discord UDP
+      '--filter-udp=19294-19344,50000-50100',
+      '--filter-l7=discord,stun',
+      '--dpi-desync=fake',
+      '--dpi-desync-repeats=11',
+      '--new',
+      // TCP всё
+      '--filter-tcp=80,443,2053,2083,2087,2096,8443',
+      '--hostlist={LISTS}list-general.txt',
+      '--hostlist={LISTS}list-google.txt',
+      '--dpi-desync=fake,multidisorder',
+      '--dpi-desync-split-pos=1,midsld',
+      '--dpi-desync-repeats=15',
+      '--dpi-desync-fooling=badseq,md5sig',
+      '--dpi-desync-fake-tls=0x00000000',
+      '--dpi-desync-fake-tls-mod=rnd,rndsni,dupsid',
+      '--dpi-desync-autottl=2'
+    ]
   }
 ]
 

@@ -10,6 +10,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
+    "pack:win": "electron-vite build && electron-builder --win --x64",
+    "pack:portable": "electron-vite build && electron-builder --win portable --x64",
     "postinstall": "electron-builder install-app-deps",
     "lint": "eslint . --ext .ts,.tsx"
   },

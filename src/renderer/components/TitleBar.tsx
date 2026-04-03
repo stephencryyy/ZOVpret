@@ -4,11 +4,7 @@
 
 import React from 'react'
 
-interface TitleBarProps {
-  onSettingsClick: () => void
-}
-
-const TitleBar: React.FC<TitleBarProps> = ({ onSettingsClick }) => {
+const TitleBar: React.FC = () => {
   const handleMinimize = () => {
     window.api?.minimizeWindow?.()
   }
@@ -25,13 +21,6 @@ const TitleBar: React.FC<TitleBarProps> = ({ onSettingsClick }) => {
       </div>
 
       <div className="titlebar__controls">
-        <button
-          className="titlebar__btn"
-          onClick={onSettingsClick}
-          title="Настройки"
-        >
-          ⚙
-        </button>
         <button
           className="titlebar__btn"
           onClick={handleMinimize}
