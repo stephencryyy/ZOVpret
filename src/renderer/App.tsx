@@ -43,22 +43,21 @@ const App: React.FC = () => {
 
   const uptimeIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = useRef<number>(0)
+  // Флаг: идёт ли Smart Start (чтобы не показывать промежуточные ошибки)
+  const isSmartStartRunningRef = useRef<boolean>(false)
 
   // ─── Загрузка начальных данных ──────────────────────────
   useEffect(() => {
     const init = async () => {
       try {
-        // Загружаем список стратегий
         const strats = await window.api?.getStrategies?.()
         if (strats) setStrategies(strats)
 
-        // Загружаем конфиг
         const config = await window.api?.getConfig?.()
         if (config?.lastStrategyId) {
           setCurrentStrategyId(config.lastStrategyId)
         }
 
-        // Проверяем начальное состояние движка
         const state = await window.api?.getEngineState?.()
         if (state) {
           setStatus(state.status as Status)
@@ -69,7 +68,6 @@ const App: React.FC = () => {
           if (state.logs) setLogs(state.logs)
         }
       } catch (e) {
-        // API может быть недоступен в dev-режиме без Electron
         console.warn('IPC not available (dev mode?):', e)
       }
     }
@@ -80,6 +78,21 @@ const App: React.FC = () => {
   // ─── IPC Event подписки ──────────────────────────────────
   useEffect(() => {
     const unsubStatus = window.api?.onStatusChange?.((newStatus: string) => {
+      // Во время Smart Start — игнорируем промежуточные error/disconnected
+      // (каждая неудачная стратегия эмитит error, но это нормально)
+      if (isSmartStartRunningRef.current) {
+        if (newStatus === 'connected') {
+          // Стратегия сработала! Обновляем UI
+          setStatus('connected')
+          startTimeRef.current = Date.now()
+          uptimeIntervalRef.current = setInterval(() => {
+            setUptime(Date.now() - startTimeRef.current)
+          }, 1000)
+        }
+        // error/disconnected/connecting — игнорируем, оставляем 'analyzing'
+        return
+      }
+
       setStatus(newStatus as Status)
 
       if (newStatus === 'connected') {
@@ -122,6 +135,7 @@ const App: React.FC = () => {
     try {
       if (status === 'connected' || status === 'analyzing') {
         // Остановка
+        isSmartStartRunningRef.current = false
         if (status === 'analyzing') {
           await window.api?.abortSmartStart?.()
         }
@@ -130,6 +144,25 @@ const App: React.FC = () => {
         setStrategyName(null)
         setSmartStartProgress(null)
       } else {
+        // Проверяем наличие бинарников, если нет — качаем автоматически
+        const binInstalled = await window.api?.areBinariesInstalled?.()
+        if (binInstalled === false) {
+          setStatus('analyzing')
+          setSmartStartProgress({
+            current: 0,
+            total: 1,
+            strategyName: 'Скачивание бинарников zapret...'
+          })
+          try {
+            await window.api?.performUpdate?.()
+          } catch (err) {
+            console.error('Update failed:', err)
+            setStatus('error')
+            setSmartStartProgress(null)
+            return
+          }
+        }
+
         // Запуск
         if (currentStrategyId) {
           // Есть выбранная стратегия — запускаем напрямую
@@ -141,11 +174,16 @@ const App: React.FC = () => {
         } else {
           // Smart Start — автоподбор
           setStatus('analyzing')
+          isSmartStartRunningRef.current = true
+
           const result = await window.api?.runSmartStart?.()
+
+          isSmartStartRunningRef.current = false
 
           if (result?.success && result.strategy) {
             setStrategyName(result.strategy.name)
             setCurrentStrategyId(result.strategy.id)
+            // status уже 'connected' от IPC event
           } else {
             setStatus('error')
             setSmartStartProgress(null)
@@ -154,6 +192,7 @@ const App: React.FC = () => {
       }
     } catch (err) {
       console.error('Toggle error:', err)
+      isSmartStartRunningRef.current = false
       setStatus('error')
     }
   }, [status, currentStrategyId, strategies])
