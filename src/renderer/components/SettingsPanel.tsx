@@ -121,7 +121,31 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           {activeTab === 'strategies' && (
             <>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Выберите профиль обхода. Smart Start автоматически подберёт оптимальный.
+                Выберите профиль обхода. Умный поиск (Auto) автоматически подберёт оптимальный.
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-section__title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Zap size={14} /> Умный поиск
+                </div>
+                <div
+                  className={`settings-item ${
+                    currentStrategyId === null ? 'settings-item--active' : ''
+                  }`}
+                  onClick={() => onStrategyChange('auto')}
+                >
+                  <div className="settings-item__left">
+                    <div className="settings-item__name">Auto (Smart Start)</div>
+                    <div className="settings-item__desc">Автоматическое тестирование и подбор профиля</div>
+                  </div>
+                  <div className={`settings-item__check ${
+                    currentStrategyId === null ? 'settings-item__check--active' : ''
+                  }`}>
+                    {currentStrategyId === null && (
+                      <span style={{ color: '#020205', fontSize: '10px', fontWeight: 900 }}>✓</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {Object.entries(grouped).map(([category, items]) => (

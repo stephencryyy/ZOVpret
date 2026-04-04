@@ -81,6 +81,12 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('strategies:set', async (_event, id: string) => {
+    if (id === 'auto') {
+      setConfig({ lastStrategyId: null })
+      // We don't restart engine here because auto implies smart start, which is a different flow
+      return
+    }
+    
     const strategy = getStrategyById(id)
     if (!strategy) throw new Error(`Стратегия ${id} не найдена`)
 

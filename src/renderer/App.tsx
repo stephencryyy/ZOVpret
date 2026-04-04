@@ -225,7 +225,7 @@ const App: React.FC = () => {
 
   // ─── Выбор стратегии в настройках ────────────────────────
   const handleStrategyChange = useCallback(async (id: string) => {
-    setCurrentStrategyId(id)
+    setCurrentStrategyId(id === 'auto' ? null : id)
     try {
       await window.api?.setStrategy?.(id)
     } catch { /* ignore in dev */ }
