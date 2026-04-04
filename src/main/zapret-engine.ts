@@ -27,6 +27,7 @@ export class ZapretEngine extends EventEmitter {
   private _startTime = 0
   private _restartCount = 0
   private _maxRestarts = 3
+  private _restartTimeout: NodeJS.Timeout | null = null
   private binPath: string
   private listsPath: string
 
@@ -158,8 +159,9 @@ export class ZapretEngine extends EventEmitter {
           if (this._restartCount < this._maxRestarts) {
             this._restartCount++
             this.log('warn', `Автоматический перезапуск (${this._restartCount}/${this._maxRestarts})...`)
-            setTimeout(() => {
-              if (this._currentStrategy) {
+            this._restartTimeout = setTimeout(() => {
+              this._restartTimeout = null
+              if (this._currentStrategy && this._status !== 'stopping') {
                 this.spawnProcess(this._currentStrategy)
               }
             }, 2000)
@@ -208,6 +210,13 @@ export class ZapretEngine extends EventEmitter {
 
   /** Остановить движок */
   async stop(): Promise<void> {
+    this._currentStrategy = null
+    
+    if (this._restartTimeout) {
+      clearTimeout(this._restartTimeout)
+      this._restartTimeout = null
+    }
+
     if (!this.process) {
       this.setStatus('stopped')
       return

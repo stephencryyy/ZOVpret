@@ -123,7 +123,7 @@ const App: React.FC = () => {
       setLogs(prev => [...prev.slice(-499), entry])
 
       // Автоматически распознаём ошибки и показываем на главном экране
-      if (entry.level === 'error' && entry.message) {
+      if (entry.level === 'error' && entry.message && !isSmartStartRunningRef.current) {
         const msg = entry.message
         if (msg.includes('администратора') || msg.includes('EACCES') || msg.includes('EPERM')) {
           setErrorMessage('Требуются права администратора. Запустите приложение от имени администратора (Run as Administrator).')
