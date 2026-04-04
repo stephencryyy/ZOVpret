@@ -1,6 +1,6 @@
 {
   "name": "zovpret",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "ZOVpret — Расширенная GUI-оболочка для обхода DPI на базе zapret",
   "main": "./out/main/index.js",
   "author": "ZOVpret Team",

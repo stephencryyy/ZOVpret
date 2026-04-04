@@ -2,8 +2,9 @@
 // ZOVpret — IPC обработчики (мост между Main и Renderer)
 // ============================================================================
 
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, shell } from 'electron'
 import { ZapretEngine } from './zapret-engine'
+import { TgProxyEngine } from './tg-proxy-engine'
 import { SmartStart } from './smart-start'
 import { STRATEGIES, getStrategyById } from './strategy-pool'
 import { getConfig, setConfig } from './config-store'
@@ -15,6 +16,7 @@ import { checkForUpdate, performUpdate, areBinariesInstalled } from './updater'
  */
 export function registerIpcHandlers(
   engine: ZapretEngine,
+  tgProxy: TgProxyEngine,
   resourcesPath: string,
   getMainWindow: () => BrowserWindow | null
 ): void {
@@ -114,6 +116,30 @@ export function registerIpcHandlers(
     return areBinariesInstalled(resourcesPath)
   })
 
+  // ─── Telegram Proxy ─────────────────────────────────────────
+  ipcMain.handle('tg-proxy:start', async () => {
+    await tgProxy.start()
+    return tgProxy.info
+  })
+
+  ipcMain.handle('tg-proxy:stop', async () => {
+    await tgProxy.stop()
+    return tgProxy.info
+  })
+
+  ipcMain.handle('tg-proxy:state', () => {
+    return {
+      ...tgProxy.info,
+      installed: tgProxy.isInstalled()
+    }
+  })
+
+  ipcMain.handle('tg-proxy:open-link', () => {
+    const link = tgProxy.info.tgLink
+    shell.openExternal(link)
+    return { success: true }
+  })
+
   // ─── Пробрасываем события движка в Renderer ─────────────────
   engine.on('status', (status: string) => {
     const win = getMainWindow()
@@ -126,6 +152,17 @@ export function registerIpcHandlers(
   })
 
   engine.on('log', (entry: any) => {
+    const win = getMainWindow()
+    if (win) win.webContents.send('engine:log', entry)
+  })
+
+  // Telegram proxy events
+  tgProxy.on('status', (status: string) => {
+    const win = getMainWindow()
+    if (win) win.webContents.send('tg-proxy:status-changed', status)
+  })
+
+  tgProxy.on('log', (entry: any) => {
     const win = getMainWindow()
     if (win) win.webContents.send('engine:log', entry)
   })

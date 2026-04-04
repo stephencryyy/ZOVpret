@@ -7,6 +7,7 @@ import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { ZapretEngine } from './zapret-engine'
+import { TgProxyEngine } from './tg-proxy-engine'
 import { registerIpcHandlers } from './ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
@@ -97,16 +98,17 @@ app.whenReady().then(async () => {
 
   const resourcesPath = getResourcesPath()
   const engine = new ZapretEngine(resourcesPath)
+  const tgProxy = new TgProxyEngine(resourcesPath)
 
   createWindow()
 
   // Регистрируем IPC
-  registerIpcHandlers(engine, resourcesPath, () => mainWindow)
+  registerIpcHandlers(engine, tgProxy, resourcesPath, () => mainWindow)
 
   // IPC для управления окном
   ipcMain.on('window:minimize', () => mainWindow?.minimize())
   ipcMain.on('window:close', () => {
-    engine.stop().finally(() => app.quit())
+    Promise.all([engine.stop(), tgProxy.stop()]).finally(() => app.quit())
   })
 
   // Загружаем UI
@@ -129,6 +131,9 @@ app.whenReady().then(async () => {
   app.on('before-quit', async () => {
     if (engine.status === 'running') {
       await engine.stop()
+    }
+    if (tgProxy.status === 'running') {
+      await tgProxy.stop()
     }
   })
 })

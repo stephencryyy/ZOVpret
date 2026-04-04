@@ -745,3 +745,29 @@ body {
   :root { --power-btn-size: 130px; }
   .power-icon { width: 42px; height: 42px; }
 }
+
+/* ─── Accessibility: Reduced Motion ────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Accessibility: Focus Visible (keyboard navigation) ───── */
+button:focus-visible,
+.settings-item:focus-visible,
+.power-button:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── Interactive Elements: pointer cursor ─────────────────── */
+.bottom-bar__btn,
+.info-card,
+.settings-header__back,
+.titlebar__btn {
+  cursor: pointer;
+}

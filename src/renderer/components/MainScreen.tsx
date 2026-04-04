@@ -6,6 +6,7 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import PowerButton from './PowerButton'
 import StatusIndicator from './StatusIndicator'
+import TgProxyWidget from './TgProxyWidget'
 
 type Status = 'disconnected' | 'analyzing' | 'connecting' | 'connected' | 'error'
 
@@ -101,6 +102,10 @@ const MainScreen: React.FC<MainScreenProps> = ({
             Hostlist
           </div>
         </motion.div>
+      </motion.div>
+
+      <motion.div variants={itemVariants} style={{ width: '100%', maxWidth: '280px', margin: '0 auto' }}>
+        <TgProxyWidget />
       </motion.div>
     </motion.div>
   )

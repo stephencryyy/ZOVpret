@@ -79,6 +79,25 @@ const api = {
     const handler = (_event: any, message: string) => callback(message)
     ipcRenderer.on('updater:progress', handler)
     return () => ipcRenderer.removeListener('updater:progress', handler)
+  },
+
+  // ─── Telegram Proxy ──────────────────────────────────────────
+  startTgProxy: () =>
+    ipcRenderer.invoke('tg-proxy:start'),
+
+  stopTgProxy: () =>
+    ipcRenderer.invoke('tg-proxy:stop'),
+
+  getTgProxyState: () =>
+    ipcRenderer.invoke('tg-proxy:state'),
+
+  openTgProxyLink: () =>
+    ipcRenderer.invoke('tg-proxy:open-link'),
+
+  onTgProxyStatusChange: (callback: (status: string) => void) => {
+    const handler = (_event: any, status: string) => callback(status)
+    ipcRenderer.on('tg-proxy:status-changed', handler)
+    return () => ipcRenderer.removeListener('tg-proxy:status-changed', handler)
   }
 }
 

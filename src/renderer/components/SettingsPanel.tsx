@@ -12,6 +12,7 @@ interface Strategy {
   category: string
 }
 
+
 interface SettingsPanelProps {
   isOpen: boolean
   onClose: () => void
@@ -120,7 +121,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           {activeTab === 'strategies' && (
             <>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Выберите профиль обхода пакетов. Если профиль не выбран, приложение попытается автоматически подобрать оптимальный (Smart Start).
+                Выберите профиль обхода. Smart Start автоматически подберёт оптимальный.
               </div>
 
               {Object.entries(grouped).map(([category, items]) => (
@@ -128,6 +129,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   <div className="settings-section__title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <CategoryIcon category={category} />
                     {categoryLabels[category] || category}
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '4px' }}>
+                      ({items.length})
+                    </span>
                   </div>
                   {items.map(strategy => (
                     <div
@@ -192,7 +196,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }}>Z</div>
                 <div style={{ fontSize: '18px', fontWeight: 800 }}>ZOVpret</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  v1.0.0 — GUI Wrapper для zapret
+                  v1.1.0 — GUI для zapret DPI bypass
                 </div>
               </div>
 
@@ -201,13 +205,19 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <div className="settings-item" style={{ cursor: 'default' }}>
                   <div className="settings-item__left">
                     <div className="settings-item__name">Стратегии</div>
-                    <div className="settings-item__desc">Flowseal/zapret-discord-youtube</div>
+                    <div className="settings-item__desc">Flowseal/zapret-discord-youtube v1.9.7b (20 профилей)</div>
                   </div>
                 </div>
                 <div className="settings-item" style={{ cursor: 'default' }}>
                   <div className="settings-item__left">
                     <div className="settings-item__name">Ядро</div>
                     <div className="settings-item__desc">bol-van/zapret (winws.exe)</div>
+                  </div>
+                </div>
+                <div className="settings-item" style={{ cursor: 'default' }}>
+                  <div className="settings-item__left">
+                    <div className="settings-item__name">Telegram Proxy</div>
+                    <div className="settings-item__desc">Flowseal/tg-ws-proxy (MTProto WS Bridge)</div>
                   </div>
                 </div>
               </div>
@@ -219,7 +229,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 lineHeight: 1.6,
                 marginTop: '8px'
               }}>
-                Это свободное программное обеспечение. Не является классическим VPN/прокси.<br/>
+                Свободное ПО. Не является VPN/прокси.<br/>
                 Модифицирует сетевые пакеты локально через WinDivert.
               </div>
             </div>
