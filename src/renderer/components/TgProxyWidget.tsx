@@ -59,7 +59,6 @@ const TgProxyWidget: React.FC = () => {
 
   return (
     <div className="tg-proxy-widget" style={{ 
-      marginTop: '16px', 
       background: 'var(--bg-glass)', 
       borderRadius: 'var(--radius-md)', 
       border: '1px solid var(--border-glass)',

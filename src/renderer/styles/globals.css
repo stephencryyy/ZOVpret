@@ -207,7 +207,8 @@ body {
   padding: 20px;
   position: relative;
   z-index: 1;
-  gap: 24px;
+  gap: 16px;
+  overflow-y: auto;
 }
 
 /* ─── Status Area ──────────────────────────────────────────── */
@@ -431,6 +432,7 @@ body {
   border-top: 1px solid var(--border-subtle);
   z-index: 10;
   position: relative;
+  flex-shrink: 0;
 }
 
 .bottom-bar__btn {
