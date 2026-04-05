@@ -122,6 +122,7 @@ export class SmartStart extends EventEmitter {
 
         // Стратегия не идеальна (или глубокий анализ) — останавливаем и пробуем следующую
         await this.engine.stop()
+        await this.delay(500) // Ждём корректного освобождения WinDivert OS
 
       } catch (err: any) {
         // Ошибка при тесте — продолжаем со следующей
@@ -131,7 +132,10 @@ export class SmartStart extends EventEmitter {
           strategyName: strategy.name,
           status: 'failed'
         })
-        try { await this.engine.stop() } catch { /* ignore */ }
+        try { 
+          await this.engine.stop() 
+          await this.delay(500) // Ждём освобождения
+        } catch { /* ignore */ }
       }
     }
 

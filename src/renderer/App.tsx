@@ -80,18 +80,9 @@ const App: React.FC = () => {
   // ─── IPC Event подписки ──────────────────────────────────
   useEffect(() => {
     const unsubStatus = window.api?.onStatusChange?.((newStatus: string) => {
-      // Во время Smart Start — игнорируем промежуточные error/disconnected
-      // (каждая неудачная стратегия эмитит error, но это нормально)
       if (isSmartStartRunningRef.current) {
-        if (newStatus === 'connected') {
-          setStatus('connected')
-          setErrorMessage(null)
-          startTimeRef.current = Date.now()
-          uptimeIntervalRef.current = setInterval(() => {
-            setUptime(Date.now() - startTimeRef.current)
-          }, 1000)
-        }
-        // error/disconnected/connecting — игнорируем, оставляем 'analyzing'
+        // Игнорируем ВСЕ статусы (включая connected) во время анализа.
+        // Переход в 'connected' мы вручную дернем, когда весь цикл завершится.
         return
       }
 
@@ -209,8 +200,15 @@ const App: React.FC = () => {
           if (result?.success && result.strategy) {
             const prefix = isDeep ? 'Глубокий: ' : 'Авто: '
             setStrategyName(prefix + result.strategy.name)
-            // Мы НАМЕРЕННО не меняем currentStrategyId, чтобы галочка оставалась на 'Auto/'Auto-deep'.
-            // Движок уже переведён в статус 'connected' со стороны backend-а.
+            
+            // Запускаем таймер аптайма и устанавливаем статус подключено,
+            // потому что в onStatusChange мы игнорировали эвенты во время SmartStart
+            setStatus('connected')
+            startTimeRef.current = Date.now()
+            if (uptimeIntervalRef.current) clearInterval(uptimeIntervalRef.current)
+            uptimeIntervalRef.current = setInterval(() => {
+              setUptime(Date.now() - startTimeRef.current)
+            }, 1000)
           } else {
             setStatus('error')
             setErrorMessage('Ни одна стратегия не сработала. Попробуйте выбрать стратегию вручную в настройках.')
