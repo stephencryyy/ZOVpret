@@ -76,7 +76,7 @@ export interface ZovpretAPI {
   getEngineState: () => Promise<EngineState>
 
   // Smart Start
-  runSmartStart: () => Promise<SmartStartResult>
+  runSmartStart: (deepAnalysis?: boolean) => Promise<SmartStartResult>
   abortSmartStart: () => Promise<void>
 
   // Настройки

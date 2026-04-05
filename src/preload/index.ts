@@ -19,8 +19,8 @@ const api = {
     ipcRenderer.invoke('engine:state'),
 
   // ─── Smart Start ────────────────────────────────────────────
-  runSmartStart: () =>
-    ipcRenderer.invoke('smart-start:run'),
+  runSmartStart: (deepAnalysis?: boolean) =>
+    ipcRenderer.invoke('smart-start:run', deepAnalysis),
 
   abortSmartStart: () =>
     ipcRenderer.invoke('smart-start:abort'),

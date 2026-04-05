@@ -49,7 +49,7 @@ export function registerIpcHandlers(
   })
 
   // ─── Smart Start ────────────────────────────────────────────
-  ipcMain.handle('smart-start:run', async () => {
+  ipcMain.handle('smart-start:run', async (_event, deepAnalysis: boolean = false) => {
     smartStart = new SmartStart(engine)
 
     // Пробрасываем прогресс в окно
@@ -58,7 +58,7 @@ export function registerIpcHandlers(
       if (win) win.webContents.send('smart-start:progress', data)
     })
 
-    const result = await smartStart.run()
+    const result = await smartStart.run(deepAnalysis)
     smartStart = null
     return result
   })
@@ -81,9 +81,8 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('strategies:set', async (_event, id: string) => {
-    if (id === 'auto') {
-      setConfig({ lastStrategyId: null })
-      // We don't restart engine here because auto implies smart start, which is a different flow
+    if (id === 'auto' || id === 'auto-deep') {
+      setConfig({ lastStrategyId: id }) // 'auto' or 'auto-deep'
       return
     }
     

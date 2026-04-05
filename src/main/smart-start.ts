@@ -12,10 +12,11 @@ import { ZapretEngine } from './zapret-engine'
 import { STRATEGIES, Strategy } from './strategy-pool'
 import { setConfig } from './config-store'
 
-/** Тестовые домены для проверки. Если один недоступен, пробуем следующий. */
+/** Тестовые домены для проверки. */
 const TEST_URLS = [
   { hostname: 'www.youtube.com', path: '/', name: 'YouTube' },
-  { hostname: 'x.com', path: '/', name: 'X (Twitter)' },
+  { hostname: 'discord.com', path: '/', name: 'Discord' },
+  { hostname: 'web.telegram.org', path: '/', name: 'Telegram' },
   { hostname: 'www.instagram.com', path: '/', name: 'Instagram' }
 ]
 
@@ -36,6 +37,7 @@ export interface SmartStartResult {
   success: boolean
   strategy: Strategy | null
   latencyMs: number
+  score: number
   error?: string
 }
 
@@ -50,11 +52,14 @@ export class SmartStart extends EventEmitter {
 
   /**
    * Запускает процесс автоматического подбора стратегии.
-   * Перебирает все стратегии из пула и тестирует каждую.
    */
-  async run(): Promise<SmartStartResult> {
+  async run(deepAnalysis: boolean = false): Promise<SmartStartResult> {
     this.aborted = false
     const total = STRATEGIES.length
+
+    let bestStrategy: Strategy | null = null
+    let bestScore = -1
+    let bestLatency = Infinity
 
     for (let i = 0; i < STRATEGIES.length; i++) {
       if (this.aborted) break
@@ -86,29 +91,36 @@ export class SmartStart extends EventEmitter {
           continue
         }
 
-        // 4. Тестировать HTTPS-запрос к тестовому домену
-        const result = await this.testConnection()
+        // 4. Тестировать HTTPS-запросы к доменам параллельно
+        const { score, avgLatency } = await this.testConnection()
 
-        if (result.success) {
-          // 5. Стратегия работает!
-          this.emit('progress', {
-            current: i + 1,
-            total,
-            strategyName: strategy.name,
-            status: 'success'
-          })
+        if (score > 0) {
+          // Стратегия работает хотя бы для одного сайта
+          if (score > bestScore || (score === bestScore && avgLatency < bestLatency)) {
+            bestScore = score
+            bestLatency = avgLatency
+            bestStrategy = strategy
+          }
 
-          // Сохраняем рабочую стратегию
-          setConfig({ lastStrategyId: strategy.id })
-
-          return {
-            success: true,
-            strategy,
-            latencyMs: result.latencyMs
+          // Fast-track: если не нужен глубокий анализ и найден идеальный (4/4) кандидат
+          if (!deepAnalysis && score === TEST_URLS.length) {
+            this.emit('progress', {
+              current: i + 1,
+              total,
+              strategyName: strategy.name,
+              status: 'success'
+            })
+            setConfig({ lastStrategyId: strategy.id })
+            return {
+              success: true,
+              strategy,
+              latencyMs: avgLatency,
+              score
+            }
           }
         }
 
-        // Стратегия не сработала — останавливаем и пробуем следующую
+        // Стратегия не идеальна (или глубокий анализ) — останавливаем и пробуем следующую
         await this.engine.stop()
 
       } catch (err: any) {
@@ -123,11 +135,23 @@ export class SmartStart extends EventEmitter {
       }
     }
 
+    // После завершения всех тестов проверяем, нашли ли мы хоть что-то
+    if (bestStrategy) {
+      setConfig({ lastStrategyId: bestStrategy.id })
+      return {
+        success: true,
+        strategy: bestStrategy,
+        latencyMs: bestLatency,
+        score: bestScore
+      }
+    }
+
     // Ни одна стратегия не сработала
     return {
       success: false,
       strategy: null,
       latencyMs: 0,
+      score: 0,
       error: 'Ни одна из стратегий не сработала. Попробуйте позже или настройте вручную.'
     }
   }
@@ -139,21 +163,23 @@ export class SmartStart extends EventEmitter {
   }
 
   /**
-   * Тестирование соединения: пробуем GET-запрос к тестовым доменам.
-   * Возвращаем успех, если хотя бы один домен ответил 200/301/302.
+   * Тестирование соединения (параллельно).
+   * Возвращает количество успешных ответов (score) и средний пинг к ним.
    */
-  private async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
-    for (const testUrl of TEST_URLS) {
-      try {
-        const result = await this.httpsGet(testUrl.hostname, testUrl.path)
-        if (result.success) {
-          return result
-        }
-      } catch {
-        continue
-      }
+  private async testConnection(): Promise<{ score: number; avgLatency: number }> {
+    const promises = TEST_URLS.map(u => this.httpsGet(u.hostname, u.path))
+    const results = await Promise.all(promises)
+
+    const successful = results.filter(r => r.success)
+    const score = successful.length
+
+    let avgLatency = Infinity
+    if (score > 0) {
+      const totalPing = successful.reduce((acc, curr) => acc + curr.latencyMs, 0)
+      avgLatency = Math.round(totalPing / score)
     }
-    return { success: false, latencyMs: 0 }
+
+    return { score, avgLatency }
   }
 
   /** Выполнить HTTPS GET-запрос */

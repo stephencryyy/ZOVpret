@@ -130,18 +130,37 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </div>
                 <div
                   className={`settings-item ${
-                    currentStrategyId === null ? 'settings-item--active' : ''
+                    currentStrategyId === 'auto' || currentStrategyId === null ? 'settings-item--active' : ''
                   }`}
                   onClick={() => onStrategyChange('auto')}
                 >
                   <div className="settings-item__left">
-                    <div className="settings-item__name">Auto (Smart Start)</div>
-                    <div className="settings-item__desc">Автоматическое тестирование и подбор профиля</div>
+                    <div className="settings-item__name">Auto (Быстрый поиск)</div>
+                    <div className="settings-item__desc">Останавливается на первой идеальной стратегии</div>
                   </div>
                   <div className={`settings-item__check ${
-                    currentStrategyId === null ? 'settings-item__check--active' : ''
+                    currentStrategyId === 'auto' || currentStrategyId === null ? 'settings-item__check--active' : ''
                   }`}>
-                    {currentStrategyId === null && (
+                    {(currentStrategyId === 'auto' || currentStrategyId === null) && (
+                      <span style={{ color: '#020205', fontSize: '10px', fontWeight: 900 }}>✓</span>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  className={`settings-item ${
+                    currentStrategyId === 'auto-deep' ? 'settings-item--active' : ''
+                  }`}
+                  onClick={() => onStrategyChange('auto-deep')}
+                >
+                  <div className="settings-item__left">
+                    <div className="settings-item__name">Auto (Глубокий анализ)</div>
+                    <div className="settings-item__desc">Тестирует всё для поиска наименьшего пинга (~1 мин)</div>
+                  </div>
+                  <div className={`settings-item__check ${
+                    currentStrategyId === 'auto-deep' ? 'settings-item__check--active' : ''
+                  }`}>
+                    {currentStrategyId === 'auto-deep' && (
                       <span style={{ color: '#020205', fontSize: '10px', fontWeight: 900 }}>✓</span>
                     )}
                   </div>

@@ -188,7 +188,7 @@ const App: React.FC = () => {
         }
 
         // Запуск
-        if (currentStrategyId) {
+        if (currentStrategyId && currentStrategyId !== 'auto' && currentStrategyId !== 'auto-deep') {
           // Есть выбранная стратегия — запускаем напрямую
           setStatus('connecting')
           await window.api?.startEngine?.(currentStrategyId)
@@ -200,7 +200,8 @@ const App: React.FC = () => {
           setStatus('analyzing')
           isSmartStartRunningRef.current = true
 
-          const result = await window.api?.runSmartStart?.()
+          const isDeep = currentStrategyId === 'auto-deep'
+          const result = await window.api?.runSmartStart?.(isDeep)
 
           isSmartStartRunningRef.current = false
 
@@ -225,7 +226,7 @@ const App: React.FC = () => {
 
   // ─── Выбор стратегии в настройках ────────────────────────
   const handleStrategyChange = useCallback(async (id: string) => {
-    setCurrentStrategyId(id === 'auto' ? null : id)
+    setCurrentStrategyId(id)
     try {
       await window.api?.setStrategy?.(id)
     } catch { /* ignore in dev */ }
