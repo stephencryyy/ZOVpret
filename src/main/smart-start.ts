@@ -102,8 +102,10 @@ export class SmartStart extends EventEmitter {
             bestStrategy = strategy
           }
 
-          // Fast-track: если не нужен глубокий анализ и найден идеальный (4/4) кандидат
-          if (!deepAnalysis && score === TEST_URLS.length) {
+          // Fast-track: если не нужен глубокий анализ и найдена рабочая стратегия (>= 2 доменов)
+          // Мы снизили порог с 4 до 2, так как некоторые стратегии могут не пробивать Instagram,
+          // но прекрасно работают для приоритетных YouTube и Discord.
+          if (!deepAnalysis && score >= 2) {
             this.emit('progress', {
               current: i + 1,
               total,
