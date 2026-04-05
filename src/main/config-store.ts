@@ -15,7 +15,7 @@ export interface AppConfig {
 }
 
 const defaults: AppConfig = {
-  lastStrategyId: null,
+  lastStrategyId: 'auto',
   filterMode: 'hostlist',
   autoUpdate: true,
   binVersion: null,

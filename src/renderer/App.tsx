@@ -204,14 +204,15 @@ const App: React.FC = () => {
           const result = await window.api?.runSmartStart?.(isDeep)
 
           isSmartStartRunningRef.current = false
+          setSmartStartProgress(null) // <--- Очищаем прогресс
 
           if (result?.success && result.strategy) {
-            setStrategyName(result.strategy.name)
-            setCurrentStrategyId(result.strategy.id)
-            // status уже 'connected' от IPC event
+            const prefix = isDeep ? 'Глубокий: ' : 'Авто: '
+            setStrategyName(prefix + result.strategy.name)
+            // Мы НАМЕРЕННО не меняем currentStrategyId, чтобы галочка оставалась на 'Auto/'Auto-deep'.
+            // Движок уже переведён в статус 'connected' со стороны backend-а.
           } else {
             setStatus('error')
-            setSmartStartProgress(null)
             setErrorMessage('Ни одна стратегия не сработала. Попробуйте выбрать стратегию вручную в настройках.')
           }
         }
