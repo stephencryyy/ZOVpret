@@ -137,7 +137,18 @@ export class SmartStart extends EventEmitter {
 
     // После завершения всех тестов проверяем, нашли ли мы хоть что-то
     if (bestStrategy) {
+      this.emit('progress', {
+        current: total,
+        total,
+        strategyName: bestStrategy.name,
+        status: 'success'
+      })
       setConfig({ lastStrategyId: bestStrategy.id })
+      try {
+        await this.engine.start(bestStrategy)
+      } catch (err) {
+        // ignore
+      }
       return {
         success: true,
         strategy: bestStrategy,
