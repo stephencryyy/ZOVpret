@@ -1,9 +1,9 @@
 // ============================================================================
 // ZOVpret — Smart Start (Автоматический подбор стратегии)
 // ============================================================================
-// Последовательно тестирует стратегии из пула, делая HTTPS-запрос к тестовому
-// домену через запущенный winws.exe. Первая стратегия, через которую удалось
-// получить HTTP 200, считается рабочей и сохраняется.
+// Последовательно тестирует стратегии из пула, делая HTTPS-запросы к тестовым
+// доменам через запущенный winws.exe. Ищет стратегию с максимальным покрытием
+// всех целевых сервисов (YouTube, Discord, Telegram, Instagram, X).
 // ============================================================================
 
 import { EventEmitter } from 'events'
@@ -17,20 +17,34 @@ const TEST_URLS = [
   { hostname: 'www.youtube.com', path: '/', name: 'YouTube' },
   { hostname: 'discord.com', path: '/', name: 'Discord' },
   { hostname: 'web.telegram.org', path: '/', name: 'Telegram' },
-  { hostname: 'www.instagram.com', path: '/', name: 'Instagram' }
+  { hostname: 'www.instagram.com', path: '/', name: 'Instagram' },
+  { hostname: 'x.com', path: '/', name: 'X (Twitter)' }
 ]
 
-/** Таймаут на тест одной стратегии (мс) */
-const TEST_TIMEOUT = 8000
+/** Таймаут на тест одной стратегии — глубокий анализ (мс) */
+const TEST_TIMEOUT_DEEP = 8000
 
-/** Задержка после запуска winws перед тестом (мс) */
-const START_DELAY = 2500
+/** Таймаут на тест одной стратегии — быстрый авто-режим (мс) */
+const TEST_TIMEOUT_FAST = 4000
+
+/** Задержка после первого запуска winws (мс) — WinDivert загружается в ядро */
+const START_DELAY_FIRST = 2500
+
+/** Задержка для последующих стратегий (мс) — WinDivert уже в памяти */
+const START_DELAY_NEXT = 1500
+
+export interface DomainResult {
+  name: string
+  success: boolean
+  latencyMs: number
+}
 
 export interface SmartStartProgress {
   current: number
   total: number
   strategyName: string
-  status: 'testing' | 'success' | 'failed'
+  status: 'testing' | 'success' | 'failed' | 'baseline'
+  domainResults?: DomainResult[]
 }
 
 export interface SmartStartResult {
@@ -38,6 +52,7 @@ export interface SmartStartResult {
   strategy: Strategy | null
   latencyMs: number
   score: number
+  domainResults?: DomainResult[]
   error?: string
 }
 
@@ -52,19 +67,63 @@ export class SmartStart extends EventEmitter {
 
   /**
    * Запускает процесс автоматического подбора стратегии.
+   *
+   * Auto (быстрый): ищет первую стратегию, покрывающую ВСЕ заблокированные домены.
+   *   Если идеальной нет — берёт лучшую по score. Таймаут 4сек, уменьшенные задержки.
+   *
+   * Deep (глубокий): тестирует все стратегии, выбирает лучшую по score + latency.
+   *   Таймаут 8сек, полные задержки.
    */
   async run(deepAnalysis: boolean = false): Promise<SmartStartResult> {
     this.aborted = false
     const total = STRATEGIES.length
+    const testTimeout = deepAnalysis ? TEST_TIMEOUT_DEEP : TEST_TIMEOUT_FAST
 
     let bestStrategy: Strategy | null = null
     let bestScore = -1
     let bestLatency = Infinity
+    let bestDomainResults: DomainResult[] = []
 
+    // ─── Baseline: проверяем какие домены заблокированы БЕЗ winws ────
+    this.emit('progress', {
+      current: 0,
+      total,
+      strategyName: 'Проверка доступности...',
+      status: 'baseline'
+    } as SmartStartProgress)
+
+    const baseline = await this.testConnection(TEST_TIMEOUT_FAST)
+    const blockedUrls = TEST_URLS.filter(
+      (_, i) => !baseline.domainResults[i].success
+    )
+
+    // Если все домены доступны без обхода — нечего обходить
+    if (blockedUrls.length === 0) {
+      return {
+        success: false,
+        strategy: null,
+        latencyMs: 0,
+        score: 0,
+        domainResults: baseline.domainResults,
+        error: 'Все домены уже доступны без обхода DPI. Обход не требуется.'
+      }
+    }
+
+    const maxScore = blockedUrls.length
+    this.emit('progress', {
+      current: 0,
+      total,
+      strategyName: `Заблокировано ${maxScore} из ${TEST_URLS.length} доменов`,
+      status: 'baseline',
+      domainResults: baseline.domainResults
+    } as SmartStartProgress)
+
+    // ─── Перебор стратегий ──────────────────────────────────────────
     for (let i = 0; i < STRATEGIES.length; i++) {
       if (this.aborted) break
 
       const strategy = STRATEGIES[i]
+      const startDelay = i === 0 ? START_DELAY_FIRST : START_DELAY_NEXT
 
       this.emit('progress', {
         current: i + 1,
@@ -78,7 +137,7 @@ export class SmartStart extends EventEmitter {
         await this.engine.start(strategy)
 
         // 2. Подождать, пока winws полностью инициализируется
-        await this.delay(START_DELAY)
+        await this.delay(startDelay)
 
         // 3. Проверить статус — если process упал, пропускаем
         if (this.engine.status !== 'running') {
@@ -92,7 +151,7 @@ export class SmartStart extends EventEmitter {
         }
 
         // 4. Тестировать HTTPS-запросы к доменам параллельно
-        const { score, avgLatency } = await this.testConnection()
+        const { score, avgLatency, domainResults } = await this.testConnection(testTimeout)
 
         if (score > 0) {
           // Стратегия работает хотя бы для одного сайта
@@ -100,24 +159,26 @@ export class SmartStart extends EventEmitter {
             bestScore = score
             bestLatency = avgLatency
             bestStrategy = strategy
+            bestDomainResults = domainResults
           }
 
-          // Fast-track: если не нужен глубокий анализ и найдена рабочая стратегия (>= 2 доменов)
-          // Мы снизили порог с 4 до 2, так как некоторые стратегии могут не пробивать Instagram,
-          // но прекрасно работают для приоритетных YouTube и Discord.
-          if (!deepAnalysis && score >= 2) {
+          // Fast-track: если не нужен глубокий анализ и найдена идеальная стратегия
+          // (покрывает ВСЕ домены), останавливаемся сразу.
+          if (!deepAnalysis && score >= TEST_URLS.length) {
             this.emit('progress', {
               current: i + 1,
               total,
               strategyName: strategy.name,
-              status: 'success'
+              status: 'success',
+              domainResults
             })
             setConfig({ lastStrategyId: strategy.id })
             return {
               success: true,
               strategy,
               latencyMs: avgLatency,
-              score
+              score,
+              domainResults
             }
           }
         }
@@ -134,8 +195,8 @@ export class SmartStart extends EventEmitter {
           strategyName: strategy.name,
           status: 'failed'
         })
-        try { 
-          await this.engine.stop() 
+        try {
+          await this.engine.stop()
           await this.delay(500) // Ждём освобождения
         } catch { /* ignore */ }
       }
@@ -147,7 +208,8 @@ export class SmartStart extends EventEmitter {
         current: total,
         total,
         strategyName: bestStrategy.name,
-        status: 'success'
+        status: 'success',
+        domainResults: bestDomainResults
       })
       setConfig({ lastStrategyId: bestStrategy.id })
       try {
@@ -159,7 +221,8 @@ export class SmartStart extends EventEmitter {
         success: true,
         strategy: bestStrategy,
         latencyMs: bestLatency,
-        score: bestScore
+        score: bestScore,
+        domainResults: bestDomainResults
       }
     }
 
@@ -181,11 +244,21 @@ export class SmartStart extends EventEmitter {
 
   /**
    * Тестирование соединения (параллельно).
-   * Возвращает количество успешных ответов (score) и средний пинг к ним.
+   * Возвращает количество успешных ответов (score), средний пинг и результаты по каждому домену.
    */
-  private async testConnection(): Promise<{ score: number; avgLatency: number }> {
-    const promises = TEST_URLS.map(u => this.httpsGet(u.hostname, u.path))
+  private async testConnection(timeout: number): Promise<{
+    score: number
+    avgLatency: number
+    domainResults: DomainResult[]
+  }> {
+    const promises = TEST_URLS.map(u => this.httpsGet(u.hostname, u.path, timeout))
     const results = await Promise.all(promises)
+
+    const domainResults: DomainResult[] = TEST_URLS.map((u, i) => ({
+      name: u.name,
+      success: results[i].success,
+      latencyMs: results[i].latencyMs
+    }))
 
     const successful = results.filter(r => r.success)
     const score = successful.length
@@ -196,19 +269,20 @@ export class SmartStart extends EventEmitter {
       avgLatency = Math.round(totalPing / score)
     }
 
-    return { score, avgLatency }
+    return { score, avgLatency, domainResults }
   }
 
   /** Выполнить HTTPS GET-запрос */
   private httpsGet(
     hostname: string,
-    path: string
+    path: string,
+    timeout: number
   ): Promise<{ success: boolean; latencyMs: number }> {
     return new Promise((resolve) => {
       const start = Date.now()
-      const timeout = setTimeout(() => {
-        resolve({ success: false, latencyMs: TEST_TIMEOUT })
-      }, TEST_TIMEOUT)
+      const timer = setTimeout(() => {
+        resolve({ success: false, latencyMs: timeout })
+      }, timeout)
 
       const req = https.get(
         {
@@ -218,10 +292,10 @@ export class SmartStart extends EventEmitter {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
           },
-          timeout: TEST_TIMEOUT
+          timeout
         },
         (res) => {
-          clearTimeout(timeout)
+          clearTimeout(timer)
           const latencyMs = Date.now() - start
           const statusCode = res.statusCode || 0
           // 200, 301, 302 — считаем успехом (сервер ответил)
@@ -232,14 +306,14 @@ export class SmartStart extends EventEmitter {
       )
 
       req.on('error', () => {
-        clearTimeout(timeout)
+        clearTimeout(timer)
         resolve({ success: false, latencyMs: Date.now() - start })
       })
 
       req.on('timeout', () => {
-        clearTimeout(timeout)
+        clearTimeout(timer)
         req.destroy()
-        resolve({ success: false, latencyMs: TEST_TIMEOUT })
+        resolve({ success: false, latencyMs: timeout })
       })
     })
   }

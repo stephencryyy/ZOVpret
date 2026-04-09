@@ -21,6 +21,13 @@ export interface Strategy {
   category: 'general' | 'alt' | 'fake_tls' | 'simple_fake' | 'custom'
 }
 
+/** Результат теста по одному домену */
+export interface DomainResult {
+  name: string
+  success: boolean
+  latencyMs: number
+}
+
 /** Результат Smart Start */
 export interface SmartStartResult {
   success: boolean
@@ -28,6 +35,7 @@ export interface SmartStartResult {
     id: string
     name: string
   }
+  domainResults?: DomainResult[]
   error?: string
 }
 
@@ -99,7 +107,7 @@ export interface ZovpretAPI {
   // Подписка на события
   onStatusChange: (callback: (status: string) => void) => () => void
   onLog: (callback: (entry: LogEntry) => void) => () => void
-  onSmartStartProgress: (callback: (data: { current: number; total: number; strategyName: string }) => void) => () => void
+  onSmartStartProgress: (callback: (data: { current: number; total: number; strategyName: string; domainResults?: DomainResult[] }) => void) => () => void
   onUpdateProgress: (callback: (message: string) => void) => () => void
 }
 

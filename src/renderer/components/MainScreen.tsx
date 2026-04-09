@@ -2,8 +2,9 @@
 // MainScreen — Главный экран приложения
 // ============================================================================
 
-import React from 'react'
+import React, { useState } from 'react'
 import { motion } from 'framer-motion'
+import { Wifi } from 'lucide-react'
 import PowerButton from './PowerButton'
 import StatusIndicator from './StatusIndicator'
 import TgProxyWidget from './TgProxyWidget'
@@ -49,6 +50,12 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
 }
 
+interface DomainTestResult {
+  name: string
+  success: boolean
+  latencyMs: number
+}
+
 const MainScreen: React.FC<MainScreenProps> = ({
   status,
   strategyName,
@@ -58,6 +65,20 @@ const MainScreen: React.FC<MainScreenProps> = ({
   smartStartProgress
 }) => {
   const isDisabled = status === 'connecting'
+  const [testResults, setTestResults] = useState<DomainTestResult[] | null>(null)
+  const [isTesting, setIsTesting] = useState(false)
+
+  const handleTestConnection = async () => {
+    setIsTesting(true)
+    setTestResults(null)
+    try {
+      const results = await (window as any).api?.testConnection?.()
+      setTestResults(results)
+    } catch {
+      setTestResults(null)
+    }
+    setIsTesting(false)
+  }
 
   return (
     <motion.div
@@ -103,6 +124,68 @@ const MainScreen: React.FC<MainScreenProps> = ({
           </div>
         </motion.div>
       </motion.div>
+
+      {/* Кнопка проверки и результаты */}
+      {status === 'connected' && (
+        <motion.div variants={itemVariants} style={{ width: '100%', maxWidth: '280px', margin: '0 auto' }}>
+          <button
+            onClick={handleTestConnection}
+            disabled={isTesting}
+            style={{
+              width: '100%',
+              padding: '8px',
+              background: 'var(--bg-glass)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '10px',
+              color: 'var(--text-secondary)',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: isTesting ? 'default' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              fontFamily: 'var(--font-family)',
+              transition: 'all 0.2s ease',
+              opacity: isTesting ? 0.6 : 1
+            }}
+          >
+            <Wifi size={13} />
+            {isTesting ? 'Проверка...' : 'Проверить соединение'}
+          </button>
+          {testResults && (
+            <div style={{
+              display: 'flex',
+              gap: '4px',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              marginTop: '6px'
+            }}>
+              {testResults.map(r => (
+                <div key={r.name} style={{
+                  padding: '2px 7px',
+                  borderRadius: '5px',
+                  fontSize: '9px',
+                  fontWeight: 600,
+                  background: r.success ? 'rgba(0,255,65,0.1)' : 'rgba(239,68,68,0.1)',
+                  border: `1px solid ${r.success ? 'rgba(0,255,65,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                  color: r.success ? '#4ade80' : '#fca5a5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px'
+                }}>
+                  <span style={{
+                    width: '5px', height: '5px', borderRadius: '50%',
+                    background: r.success ? '#00FF41' : '#ef4444'
+                  }} />
+                  {r.name}
+                  {r.success && <span style={{ opacity: 0.5 }}>{r.latencyMs}ms</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       <motion.div variants={itemVariants} style={{ width: '100%', maxWidth: '280px', margin: '0 auto' }}>
         <TgProxyWidget />

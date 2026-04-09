@@ -2,15 +2,17 @@
 // ZOVpret — Точка входа Main Process
 // ============================================================================
 
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { ZapretEngine } from './zapret-engine'
 import { TgProxyEngine } from './tg-proxy-engine'
 import { registerIpcHandlers } from './ipc-handlers'
+import { getConfig, setConfig } from './config-store'
 
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 
 /** Путь к ресурсам (бинарники, списки) */
 function getResourcesPath(): string {
@@ -88,6 +90,63 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
+/** Создать системный трей */
+function createTray(engine: ZapretEngine): void {
+  const iconPath = join(__dirname, '../../build/icon.png')
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  tray = new Tray(icon)
+  tray.setToolTip('ZOVpret')
+
+  const updateTrayMenu = (): void => {
+    const isRunning = engine.status === 'running'
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'ZOVpret',
+        enabled: false
+      },
+      { type: 'separator' },
+      {
+        label: isRunning ? 'Подключено' : 'Отключено',
+        enabled: false
+      },
+      { type: 'separator' },
+      {
+        label: 'Показать',
+        click: () => {
+          mainWindow?.show()
+          mainWindow?.focus()
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Выход',
+        click: () => {
+          mainWindow?.destroy()
+          app.quit()
+        }
+      }
+    ])
+    tray?.setContextMenu(contextMenu)
+  }
+
+  updateTrayMenu()
+  engine.on('status', () => updateTrayMenu())
+
+  tray.on('double-click', () => {
+    mainWindow?.show()
+    mainWindow?.focus()
+  })
+}
+
+/** Настроить автозапуск */
+function setupAutoStart(): void {
+  const config = getConfig()
+  app.setLoginItemSettings({
+    openAtLogin: config.autoStart,
+    args: config.startMinimized ? ['--minimized'] : []
+  })
+}
+
 // ─── Инициализация приложения ─────────────────────────────────
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.zovpret.app')
@@ -102,13 +161,34 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  // Системный трей
+  createTray(engine)
+
+  // Автозапуск
+  setupAutoStart()
+
+  // Если запущено с --minimized, скрываем окно
+  if (process.argv.includes('--minimized')) {
+    mainWindow?.hide()
+  }
+
   // Регистрируем IPC
   registerIpcHandlers(engine, tgProxy, resourcesPath, () => mainWindow)
 
   // IPC для управления окном
   ipcMain.on('window:minimize', () => mainWindow?.minimize())
   ipcMain.on('window:close', () => {
-    Promise.all([engine.stop(), tgProxy.stop()]).finally(() => app.quit())
+    // Сворачиваем в трей вместо закрытия
+    mainWindow?.hide()
+  })
+
+  // IPC для обновления autoStart
+  ipcMain.handle('config:autostart', (_event, enabled: boolean) => {
+    setConfig({ autoStart: enabled })
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      args: getConfig().startMinimized ? ['--minimized'] : []
+    })
   })
 
   // Загружаем UI
@@ -139,5 +219,5 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  app.quit()
+  // Не закрываем приложение — работаем в трее
 })

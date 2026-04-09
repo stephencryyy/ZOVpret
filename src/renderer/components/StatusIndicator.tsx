@@ -8,6 +8,12 @@ import { AlertTriangle, Activity, Zap, CheckCircle2 } from 'lucide-react'
 
 type Status = 'disconnected' | 'analyzing' | 'connecting' | 'connected' | 'error'
 
+interface DomainResult {
+  name: string
+  success: boolean
+  latencyMs: number
+}
+
 interface StatusIndicatorProps {
   status: Status
   strategyName: string | null
@@ -16,6 +22,7 @@ interface StatusIndicatorProps {
     current: number
     total: number
     strategyName: string
+    domainResults?: DomainResult[]
   } | null
 }
 
@@ -37,6 +44,52 @@ const getStatusIcon = (status: Status) => {
   }
 }
 
+const DomainResultsBar: React.FC<{ results: DomainResult[] }> = ({ results }) => {
+  return (
+    <div style={{
+      display: 'flex',
+      gap: '6px',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      marginTop: '8px'
+    }}>
+      {results.map((r) => (
+        <div
+          key={r.name}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '3px 8px',
+            borderRadius: '6px',
+            fontSize: '10px',
+            fontWeight: 600,
+            background: r.success
+              ? 'rgba(0, 255, 65, 0.1)'
+              : 'rgba(239, 68, 68, 0.1)',
+            border: `1px solid ${r.success ? 'rgba(0, 255, 65, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+            color: r.success ? '#4ade80' : '#fca5a5'
+          }}
+        >
+          <span style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            background: r.success ? '#00FF41' : '#ef4444',
+            flexShrink: 0
+          }} />
+          {r.name}
+          {r.success && (
+            <span style={{ opacity: 0.6, fontSize: '9px' }}>
+              {r.latencyMs}ms
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   status,
   strategyName,
@@ -46,7 +99,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   return (
     <div className="status-area">
       <div className="status-label">Статус сети</div>
-      
+
       <AnimatePresence mode="popLayout">
         <motion.div
           key={status}
@@ -95,7 +148,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 
         {/* Бейдж стратегии при подключении */}
         {status === 'connected' && strategyName && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
@@ -108,7 +161,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 
         {/* Прогресс Smart Start */}
         {status === 'analyzing' && smartStartProgress && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -128,6 +181,10 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                 }}
               />
             </div>
+            {/* Per-domain результаты */}
+            {smartStartProgress.domainResults && (
+              <DomainResultsBar results={smartStartProgress.domainResults} />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

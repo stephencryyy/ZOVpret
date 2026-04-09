@@ -23,11 +23,14 @@ export class ZapretEngine extends EventEmitter {
   private process: ChildProcess | null = null
   private _status: EngineStatus = 'stopped'
   private _currentStrategy: Strategy | null = null
-  private _logs: LogEntry[] = []
+  private _logs: LogEntry[] = new Array(1000)
+  private _logWriteIdx = 0
+  private _logCount = 0
   private _startTime = 0
   private _restartCount = 0
   private _maxRestarts = 3
   private _restartTimeout: NodeJS.Timeout | null = null
+  private _operationId = 0 // Guard для race condition при start/stop
   private binPath: string
   private listsPath: string
 
@@ -46,7 +49,15 @@ export class ZapretEngine extends EventEmitter {
   }
 
   get logs(): LogEntry[] {
-    return this._logs.slice(-500) // Последние 500 записей
+    const cap = 1000
+    if (this._logCount <= cap) {
+      return this._logs.slice(0, this._logCount)
+    }
+    // Circular buffer: вернуть в порядке от старых к новым
+    return [
+      ...this._logs.slice(this._logWriteIdx),
+      ...this._logs.slice(0, this._logWriteIdx)
+    ]
   }
 
   get uptime(): number {
@@ -57,11 +68,12 @@ export class ZapretEngine extends EventEmitter {
     return this.process?.pid ?? null
   }
 
-  /** Добавить запись в лог */
+  /** Добавить запись в лог (circular buffer — O(1)) */
   private log(level: LogEntry['level'], message: string): void {
     const entry: LogEntry = { timestamp: Date.now(), level, message }
-    this._logs.push(entry)
-    if (this._logs.length > 1000) this._logs.shift()
+    this._logs[this._logWriteIdx] = entry
+    this._logWriteIdx = (this._logWriteIdx + 1) % 1000
+    this._logCount++
     this.emit('log', entry)
   }
 
@@ -85,9 +97,15 @@ export class ZapretEngine extends EventEmitter {
    * Запустить winws.exe с указанной стратегией
    */
   async start(strategy: Strategy): Promise<void> {
+    // Инкрементируем ID операции — все предыдущие авто-рестарты будут проигнорированы
+    const opId = ++this._operationId
+
     if (this._status === 'running' || this._status === 'starting') {
       await this.stop()
     }
+
+    // Если за время stop() начался другой start(), выходим
+    if (opId !== this._operationId) return
 
     if (!this.checkBinaries()) {
       this.setStatus('error')
@@ -158,10 +176,12 @@ export class ZapretEngine extends EventEmitter {
           // Неожиданное завершение — попытка перезапуска
           if (this._restartCount < this._maxRestarts) {
             this._restartCount++
+            const currentOpId = this._operationId
             this.log('warn', `Автоматический перезапуск (${this._restartCount}/${this._maxRestarts})...`)
             this._restartTimeout = setTimeout(() => {
               this._restartTimeout = null
-              if (this._currentStrategy && this._status !== 'stopping') {
+              // Проверяем, что не начался другой start() за время ожидания
+              if (currentOpId === this._operationId && this._currentStrategy && this._status !== 'stopping') {
                 this.spawnProcess(this._currentStrategy)
               }
             }, 2000)
@@ -210,8 +230,10 @@ export class ZapretEngine extends EventEmitter {
 
   /** Остановить движок */
   async stop(): Promise<void> {
+    // Инкрементируем operationId, чтобы отменить запланированные рестарты
+    this._operationId++
     this._currentStrategy = null
-    
+
     if (this._restartTimeout) {
       clearTimeout(this._restartTimeout)
       this._restartTimeout = null
@@ -282,6 +304,8 @@ export class ZapretEngine extends EventEmitter {
 
   /** Очистить логи */
   clearLogs(): void {
-    this._logs = []
+    this._logs = new Array(1000)
+    this._logWriteIdx = 0
+    this._logCount = 0
   }
 }

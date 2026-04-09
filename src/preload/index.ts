@@ -49,6 +49,27 @@ const api = {
   areBinariesInstalled: () =>
     ipcRenderer.invoke('updater:binaries-installed'),
 
+  // ─── Версия приложения ───────────────────────────────────────
+  getAppVersion: () =>
+    ipcRenderer.invoke('app:version'),
+
+  // ─── Управление списками доменов ────────────────────────────
+  getCustomDomains: () =>
+    ipcRenderer.invoke('domains:get-custom'),
+
+  setCustomDomains: (domains: string[]) =>
+    ipcRenderer.invoke('domains:set-custom', domains),
+
+  getExcludeDomains: () =>
+    ipcRenderer.invoke('domains:get-exclude'),
+
+  setExcludeDomains: (domains: string[]) =>
+    ipcRenderer.invoke('domains:set-exclude', domains),
+
+  // ─── Тест соединения ─────────────────────────────────────────
+  testConnection: () =>
+    ipcRenderer.invoke('engine:test-connection'),
+
   // ─── Управление окном ───────────────────────────────────────
   minimizeWindow: () =>
     ipcRenderer.send('window:minimize'),
