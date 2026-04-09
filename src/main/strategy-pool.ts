@@ -149,7 +149,37 @@ export const STRATEGIES: Strategy[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════
-  // 3. ALT 2 — multidisorder + md5sig
+  // 3. Instagram / Meta — Оптимизировано под Instagram/Facebook
+  // ═══════════════════════════════════════════════════════════════
+  {
+    id: 'instagram_meta',
+    name: 'Instagram / Meta',
+    description: 'Для Instagram, Facebook, WhatsApp. Fake TLS + rndsni + autottl.',
+    category: 'general',
+    args: [
+      '--wf-tcp=80,443', '--wf-udp=443',
+      '--filter-udp=443',
+      ...HOSTLIST_GENERAL_TCP,
+      '--dpi-desync=fake', '--dpi-desync-repeats=11',
+      '--dpi-desync-fake-quic={BIN}quic_initial_www_google_com.bin',
+      '--new',
+      '--filter-tcp=443',
+      ...HOSTLIST_GENERAL_TCP,
+      '--dpi-desync=fake,multidisorder', '--dpi-desync-split-pos=1,midsld',
+      '--dpi-desync-repeats=11', '--dpi-desync-fooling=badseq',
+      '--dpi-desync-fake-tls=0x00000000',
+      '--dpi-desync-fake-tls-mod=rnd,rndsni,dupsid',
+      '--dpi-desync-autottl=2',
+      '--new',
+      '--filter-tcp=80',
+      ...HOSTLIST_GENERAL_TCP,
+      '--dpi-desync=fake,multidisorder', '--dpi-desync-split-pos=1,host+1',
+      '--dpi-desync-repeats=6', '--dpi-desync-fooling=badseq'
+    ]
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // 4. ALT 2 — multidisorder + md5sig
   // ═══════════════════════════════════════════════════════════════
   {
     id: 'alt2',
@@ -716,35 +746,6 @@ export const STRATEGIES: Strategy[] = [
     ]
   },
 
-  // ═══════════════════════════════════════════════════════════════
-  // 20. Instagram / Meta — Оптимизировано под Instagram/Facebook
-  // ═══════════════════════════════════════════════════════════════
-  {
-    id: 'instagram_meta',
-    name: 'Instagram / Meta',
-    description: 'Для Instagram, Facebook, WhatsApp. Fake TLS + rndsni + autottl.',
-    category: 'general',
-    args: [
-      '--wf-tcp=80,443', '--wf-udp=443',
-      '--filter-udp=443',
-      ...HOSTLIST_GENERAL_TCP,
-      '--dpi-desync=fake', '--dpi-desync-repeats=11',
-      '--dpi-desync-fake-quic={BIN}quic_initial_www_google_com.bin',
-      '--new',
-      '--filter-tcp=443',
-      ...HOSTLIST_GENERAL_TCP,
-      '--dpi-desync=fake,multidisorder', '--dpi-desync-split-pos=1,midsld',
-      '--dpi-desync-repeats=11', '--dpi-desync-fooling=badseq',
-      '--dpi-desync-fake-tls=0x00000000',
-      '--dpi-desync-fake-tls-mod=rnd,rndsni,dupsid',
-      '--dpi-desync-autottl=2',
-      '--new',
-      '--filter-tcp=80',
-      ...HOSTLIST_GENERAL_TCP,
-      '--dpi-desync=fake,multidisorder', '--dpi-desync-split-pos=1,host+1',
-      '--dpi-desync-repeats=6', '--dpi-desync-fooling=badseq'
-    ]
-  }
 ]
 
 /** Получить стратегию по ID */

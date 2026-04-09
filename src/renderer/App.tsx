@@ -25,10 +25,17 @@ interface Strategy {
   category: string
 }
 
+interface DomainResult {
+  name: string
+  success: boolean
+  latencyMs: number
+}
+
 interface SmartStartProgress {
   current: number
   total: number
   strategyName: string
+  domainResults?: DomainResult[]
 }
 
 const App: React.FC = () => {
@@ -42,8 +49,9 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [smartStartProgress, setSmartStartProgress] = useState<SmartStartProgress | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'updating' | 'done' | 'error'>('idle')
 
-  const uptimeIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const uptimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
   // Флаг: идёт ли Smart Start (чтобы не показывать промежуточные ошибки)
   const isSmartStartRunningRef = useRef<boolean>(false)
@@ -132,7 +140,8 @@ const App: React.FC = () => {
       setSmartStartProgress({
         current: data.current,
         total: data.total,
-        strategyName: data.strategyName
+        strategyName: data.strategyName,
+        domainResults: data.domainResults
       })
     })
 
@@ -254,16 +263,31 @@ const App: React.FC = () => {
         </button>
         <button
           className="bottom-bar__btn bottom-bar__btn--update"
+          disabled={updateStatus === 'checking' || updateStatus === 'updating'}
           onClick={async () => {
             try {
+              setUpdateStatus('checking')
               const info = await window.api?.checkUpdate?.()
               if (info?.available) {
+                setUpdateStatus('updating')
                 await window.api?.performUpdate?.()
+                setUpdateStatus('done')
+                setTimeout(() => setUpdateStatus('idle'), 3000)
+              } else {
+                setUpdateStatus('done')
+                setTimeout(() => setUpdateStatus('idle'), 2000)
               }
-            } catch { /* ignore */ }
+            } catch {
+              setUpdateStatus('error')
+              setTimeout(() => setUpdateStatus('idle'), 3000)
+            }
           }}
         >
-          <RefreshCw size={14} /> Обновить
+          <RefreshCw size={14} className={updateStatus === 'checking' || updateStatus === 'updating' ? 'spin' : ''} />
+          {updateStatus === 'checking' ? 'Проверка...' :
+           updateStatus === 'updating' ? 'Обновление...' :
+           updateStatus === 'done' ? 'Готово' :
+           updateStatus === 'error' ? 'Ошибка' : 'Обновить'}
         </button>
       </div>
 

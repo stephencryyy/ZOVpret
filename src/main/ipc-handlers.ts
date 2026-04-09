@@ -2,7 +2,9 @@
 // ZOVpret — IPC обработчики (мост между Main и Renderer)
 // ============================================================================
 
-import { ipcMain, BrowserWindow, shell } from 'electron'
+import { ipcMain, BrowserWindow, shell, app } from 'electron'
+import { readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { ZapretEngine } from './zapret-engine'
 import { TgProxyEngine } from './tg-proxy-engine'
 import { SmartStart } from './smart-start'
@@ -80,27 +82,46 @@ export function registerIpcHandlers(
     }))
   })
 
-  ipcMain.handle('strategies:set', async (_event, id: string) => {
+  ipcMain.handle('strategies:set', async (_event, id: unknown) => {
+    if (typeof id !== 'string' || !/^[a-z0-9_-]+$/.test(id)) {
+      throw new Error('Некорректный ID стратегии')
+    }
+
     if (id === 'auto' || id === 'auto-deep') {
-      setConfig({ lastStrategyId: id }) // 'auto' or 'auto-deep'
+      setConfig({ lastStrategyId: id })
       return
     }
-    
+
     const strategy = getStrategyById(id)
     if (!strategy) throw new Error(`Стратегия ${id} не найдена`)
 
     setConfig({ lastStrategyId: id })
 
     if (engine.status === 'running') {
-      await engine.start(strategy) // Перезапуск с новой стратегией
+      await engine.start(strategy)
     }
   })
 
   // ─── Настройки ──────────────────────────────────────────────
   ipcMain.handle('config:get', () => getConfig())
 
-  ipcMain.handle('config:set', (_event, partial: Record<string, any>) => {
-    setConfig(partial)
+  const ALLOWED_CONFIG_KEYS = new Set([
+    'lastStrategyId', 'filterMode', 'autoUpdate', 'binVersion',
+    'customDomains', 'autoStart', 'startMinimized', 'logLevel'
+  ])
+
+  ipcMain.handle('config:set', (_event, partial: unknown) => {
+    if (!partial || typeof partial !== 'object' || Array.isArray(partial)) {
+      throw new Error('Некорректные данные настроек')
+    }
+    // Фильтруем только разрешённые ключи
+    const sanitized: Record<string, any> = {}
+    for (const [key, value] of Object.entries(partial as Record<string, unknown>)) {
+      if (ALLOWED_CONFIG_KEYS.has(key)) {
+        sanitized[key] = value
+      }
+    }
+    setConfig(sanitized)
     return getConfig()
   })
 
@@ -143,6 +164,91 @@ export function registerIpcHandlers(
     const link = tgProxy.info.tgLink
     shell.openExternal(link)
     return { success: true }
+  })
+
+  // ─── Версия приложения ───────────────────────────────────────
+  ipcMain.handle('app:version', () => app.getVersion())
+
+  // ─── Управление списками доменов ────────────────────────────
+  const listsPath = join(resourcesPath, 'lists')
+
+  ipcMain.handle('domains:get-custom', () => {
+    try {
+      const content = readFileSync(join(listsPath, 'list-general-user.txt'), 'utf-8')
+      return content.split('\n').map(l => l.trim()).filter(Boolean)
+    } catch { return [] }
+  })
+
+  ipcMain.handle('domains:set-custom', (_event, domains: unknown) => {
+    if (!Array.isArray(domains)) throw new Error('Некорректный формат доменов')
+    const safe = (domains as string[])
+      .map(d => String(d).trim().toLowerCase())
+      .filter(d => /^[a-z0-9.-]+$/.test(d))
+    writeFileSync(join(listsPath, 'list-general-user.txt'), safe.join('\n') + '\n', 'utf-8')
+    return safe
+  })
+
+  ipcMain.handle('domains:get-exclude', () => {
+    try {
+      const content = readFileSync(join(listsPath, 'list-exclude-user.txt'), 'utf-8')
+      return content.split('\n').map(l => l.trim()).filter(Boolean)
+    } catch { return [] }
+  })
+
+  ipcMain.handle('domains:set-exclude', (_event, domains: unknown) => {
+    if (!Array.isArray(domains)) throw new Error('Некорректный формат доменов')
+    const safe = (domains as string[])
+      .map(d => String(d).trim().toLowerCase())
+      .filter(d => /^[a-z0-9.-]+$/.test(d))
+    writeFileSync(join(listsPath, 'list-exclude-user.txt'), safe.join('\n') + '\n', 'utf-8')
+    return safe
+  })
+
+  // ─── Тест соединения ─────────────────────────────────────────
+  ipcMain.handle('engine:test-connection', async () => {
+    // Делаем HTTP тесты напрямую (не трогая движок)
+    const https = require('https')
+    const TEST_URLS = [
+      { hostname: 'www.youtube.com', path: '/', name: 'YouTube' },
+      { hostname: 'discord.com', path: '/', name: 'Discord' },
+      { hostname: 'web.telegram.org', path: '/', name: 'Telegram' },
+      { hostname: 'www.instagram.com', path: '/', name: 'Instagram' },
+      { hostname: 'x.com', path: '/', name: 'X (Twitter)' }
+    ]
+
+    const results = await Promise.all(TEST_URLS.map(u => {
+      return new Promise<{ name: string; success: boolean; latencyMs: number }>((resolve) => {
+        const start = Date.now()
+        const timeout = setTimeout(() => {
+          resolve({ name: u.name, success: false, latencyMs: 4000 })
+        }, 4000)
+
+        const req = https.get({
+          hostname: u.hostname,
+          path: u.path,
+          port: 443,
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 4000
+        }, (res: any) => {
+          clearTimeout(timeout)
+          const latencyMs = Date.now() - start
+          const success = (res.statusCode || 0) >= 200 && (res.statusCode || 0) < 400
+          res.destroy()
+          resolve({ name: u.name, success, latencyMs })
+        })
+        req.on('error', () => {
+          clearTimeout(timeout)
+          resolve({ name: u.name, success: false, latencyMs: Date.now() - start })
+        })
+        req.on('timeout', () => {
+          clearTimeout(timeout)
+          req.destroy()
+          resolve({ name: u.name, success: false, latencyMs: 4000 })
+        })
+      })
+    }))
+
+    return results
   })
 
   // ─── Пробрасываем события движка в Renderer ─────────────────

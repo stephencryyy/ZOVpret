@@ -2,8 +2,8 @@
 // SettingsPanel — Slide-in панель настроек
 // ============================================================================
 
-import React, { useState } from 'react'
-import { ChevronLeft, Settings2, Target, List, Info, Ghost, Zap, Shuffle } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { ChevronLeft, Settings2, Target, List, Info, Ghost, Zap, Shuffle, Globe, Plus, X } from 'lucide-react'
 
 interface Strategy {
   id: string
@@ -22,6 +22,84 @@ interface SettingsPanelProps {
   logs: Array<{ timestamp: number; level: string; message: string }>
 }
 
+const LogsTab: React.FC<{
+  logs: Array<{ timestamp: number; level: string; message: string }>
+  formatTime: (ts: number) => string
+}> = ({ logs, formatTime }) => {
+  const [search, setSearch] = useState('')
+  const [levelFilter, setLevelFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all')
+
+  const filtered = logs.slice(-200).filter(entry => {
+    if (levelFilter !== 'all' && entry.level !== levelFilter) return false
+    if (search && !entry.message.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '8px' }}>
+      {/* Поиск и фильтры */}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Поиск в логах..."
+          style={{
+            flex: 1,
+            padding: '5px 10px',
+            background: 'var(--bg-glass)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '6px',
+            color: 'var(--text-primary)',
+            fontSize: '10px',
+            fontFamily: 'var(--font-family)',
+            outline: 'none'
+          }}
+        />
+        {(['all', 'error', 'warn', 'info'] as const).map(level => (
+          <button
+            key={level}
+            onClick={() => setLevelFilter(level)}
+            style={{
+              padding: '4px 8px',
+              background: levelFilter === level ? (
+                level === 'error' ? 'rgba(239,68,68,0.2)' :
+                level === 'warn' ? 'rgba(245,158,11,0.2)' :
+                'var(--bg-glass)'
+              ) : 'transparent',
+              border: `1px solid ${levelFilter === level ? 'var(--border-subtle)' : 'transparent'}`,
+              borderRadius: '4px',
+              color: levelFilter === level ? 'var(--text-primary)' : 'var(--text-muted)',
+              fontSize: '9px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-family)'
+            }}
+          >
+            {level === 'all' ? 'Все' : level}
+          </button>
+        ))}
+      </div>
+      {/* Логи */}
+      <div className="log-viewer" style={{ maxHeight: '100%', flex: 1 }}>
+        {filtered.length === 0 && (
+          <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+            {logs.length === 0 ? 'Терминал пуст. Логи появятся после запуска движка.' : 'Ничего не найдено'}
+          </div>
+        )}
+        {filtered.map((entry, i) => (
+          <div className="log-entry" key={i}>
+            <span className="log-entry__time">{formatTime(entry.timestamp)}</span>
+            <span className={`log-entry__msg log-entry__msg--${entry.level}`}>
+              {entry.message}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
   isOpen,
   onClose,
@@ -30,7 +108,54 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onStrategyChange,
   logs
 }) => {
-  const [activeTab, setActiveTab] = useState<'strategies' | 'logs' | 'about'>('strategies')
+  const [activeTab, setActiveTab] = useState<'strategies' | 'domains' | 'logs' | 'about'>('strategies')
+  const [appVersion, setAppVersion] = useState('...')
+  const [customDomains, setCustomDomains] = useState<string[]>([])
+  const [excludeDomains, setExcludeDomains] = useState<string[]>([])
+  const [newCustomDomain, setNewCustomDomain] = useState('')
+  const [newExcludeDomain, setNewExcludeDomain] = useState('')
+
+  useEffect(() => {
+    ;(window as any).api?.getAppVersion?.().then((v: string) => {
+      if (v) setAppVersion(v)
+    }).catch(() => {})
+    ;(window as any).api?.getCustomDomains?.().then((d: string[]) => {
+      if (d) setCustomDomains(d)
+    }).catch(() => {})
+    ;(window as any).api?.getExcludeDomains?.().then((d: string[]) => {
+      if (d) setExcludeDomains(d)
+    }).catch(() => {})
+  }, [])
+
+  const addCustomDomain = () => {
+    const d = newCustomDomain.trim().toLowerCase()
+    if (!d || customDomains.includes(d)) return
+    const updated = [...customDomains, d]
+    setCustomDomains(updated)
+    setNewCustomDomain('')
+    ;(window as any).api?.setCustomDomains?.(updated)
+  }
+
+  const removeCustomDomain = (domain: string) => {
+    const updated = customDomains.filter(d => d !== domain)
+    setCustomDomains(updated)
+    ;(window as any).api?.setCustomDomains?.(updated)
+  }
+
+  const addExcludeDomain = () => {
+    const d = newExcludeDomain.trim().toLowerCase()
+    if (!d || excludeDomains.includes(d)) return
+    const updated = [...excludeDomains, d]
+    setExcludeDomains(updated)
+    setNewExcludeDomain('')
+    ;(window as any).api?.setExcludeDomains?.(updated)
+  }
+
+  const removeExcludeDomain = (domain: string) => {
+    const updated = excludeDomains.filter(d => d !== domain)
+    setExcludeDomains(updated)
+    ;(window as any).api?.setExcludeDomains?.(updated)
+  }
 
   const formatTime = (ts: number) => {
     const d = new Date(ts)
@@ -89,29 +214,30 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           padding: '8px 20px 0',
           borderBottom: '1px solid var(--border-subtle)'
         }}>
-          {(['strategies', 'logs', 'about'] as const).map(tab => (
+          {(['strategies', 'domains', 'logs', 'about'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
-                padding: '8px 16px',
+                padding: '8px 12px',
                 background: activeTab === tab ? 'var(--bg-glass)' : 'transparent',
                 border: 'none',
                 borderBottom: activeTab === tab ? '2px solid var(--accent-primary)' : '2px solid transparent',
                 color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
                 cursor: 'pointer',
                 fontFamily: 'var(--font-family)',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 600,
                 transition: 'all 0.2s ease',
                 borderRadius: '6px 6px 0 0',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '5px'
               }}
             >
-              {tab === 'strategies' ? <><Target size={14}/> Профили</> :
-               tab === 'logs' ? <><List size={14}/> Логи</> : <><Info size={14}/> Инфо</>}
+              {tab === 'strategies' ? <><Target size={13}/> Профили</> :
+               tab === 'domains' ? <><Globe size={13}/> Домены</> :
+               tab === 'logs' ? <><List size={13}/> Логи</> : <><Info size={13}/> Инфо</>}
             </button>
           ))}
         </div>
@@ -202,23 +328,158 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </>
           )}
 
+          {/* ─── Вкладка: Домены ────────────────── */}
+          {activeTab === 'domains' && (
+            <>
+              {/* Свои домены */}
+              <div className="settings-section">
+                <div className="settings-section__title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Plus size={14} /> Свои домены
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: 1.5 }}>
+                  Добавьте домены, которые нужно обходить помимо основного списка.
+                </div>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                  <input
+                    type="text"
+                    value={newCustomDomain}
+                    onChange={(e) => setNewCustomDomain(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addCustomDomain()}
+                    placeholder="example.com"
+                    style={{
+                      flex: 1,
+                      padding: '6px 10px',
+                      background: 'var(--bg-glass)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '8px',
+                      color: 'var(--text-primary)',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-family)',
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    onClick={addCustomDomain}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'var(--accent-gradient)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: '#020205',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
+                {customDomains.length === 0 && (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px', textAlign: 'center', padding: '8px' }}>
+                    Пользовательский список пуст
+                  </div>
+                )}
+                {customDomains.map(domain => (
+                  <div
+                    key={domain}
+                    className="settings-item"
+                    style={{ padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <span style={{ fontSize: '11px', fontFamily: 'monospace' }}>{domain}</span>
+                    <button
+                      onClick={() => removeCustomDomain(domain)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#ef4444',
+                        padding: '2px',
+                        display: 'flex'
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Исключения */}
+              <div className="settings-section">
+                <div className="settings-section__title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <X size={14} /> Исключения
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: 1.5 }}>
+                  Домены, для которых НЕ применять обход DPI (банки, гос. сайты и т.п.)
+                </div>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                  <input
+                    type="text"
+                    value={newExcludeDomain}
+                    onChange={(e) => setNewExcludeDomain(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addExcludeDomain()}
+                    placeholder="sberbank.ru"
+                    style={{
+                      flex: 1,
+                      padding: '6px 10px',
+                      background: 'var(--bg-glass)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '8px',
+                      color: 'var(--text-primary)',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-family)',
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    onClick={addExcludeDomain}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '8px',
+                      color: '#fca5a5',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
+                {excludeDomains.length === 0 && (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px', textAlign: 'center', padding: '8px' }}>
+                    Список исключений пуст
+                  </div>
+                )}
+                {excludeDomains.map(domain => (
+                  <div
+                    key={domain}
+                    className="settings-item"
+                    style={{ padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <span style={{ fontSize: '11px', fontFamily: 'monospace' }}>{domain}</span>
+                    <button
+                      onClick={() => removeExcludeDomain(domain)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#ef4444',
+                        padding: '2px',
+                        display: 'flex'
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           {/* ─── Вкладка: Логи ─────────────────── */}
           {activeTab === 'logs' && (
-            <div className="log-viewer" style={{ maxHeight: '100%', flex: 1 }}>
-              {logs.length === 0 && (
-                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
-                  Терминал пуст. Логи появятся после запуска движка.
-                </div>
-              )}
-              {logs.slice(-200).map((entry, i) => (
-                <div className="log-entry" key={i}>
-                  <span className="log-entry__time">{formatTime(entry.timestamp)}</span>
-                  <span className={`log-entry__msg log-entry__msg--${entry.level}`}>
-                    {entry.message}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <LogsTab logs={logs} formatTime={formatTime} />
           )}
 
           {/* ─── Вкладка: О программе ──────────── */}
@@ -239,7 +500,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }}>Z</div>
                 <div style={{ fontSize: '18px', fontWeight: 800 }}>ZOVpret</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  v1.1.0 — GUI для zapret DPI bypass
+                  v{appVersion} — GUI для zapret DPI bypass
                 </div>
               </div>
 

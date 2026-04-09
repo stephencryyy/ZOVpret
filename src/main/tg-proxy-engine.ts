@@ -28,6 +28,9 @@ export class TgProxyEngine extends EventEmitter {
   private _port = 1443
   private _secret: string
   private binPath: string
+  private _restartCount = 0
+  private _maxRestarts = 3
+  private _restartTimeout: NodeJS.Timeout | null = null
 
   constructor(resourcesPath: string) {
     super()
@@ -71,6 +74,12 @@ export class TgProxyEngine extends EventEmitter {
       await this.stop()
     }
 
+    this._restartCount = 0
+    await this.doSpawn()
+  }
+
+  /** Внутренний метод спавна процесса (используется при авто-рестарте) */
+  private async doSpawn(): Promise<void> {
     const exePath = this.getExePath()
     if (!exePath) {
       this._status = 'error'
@@ -113,9 +122,26 @@ export class TgProxyEngine extends EventEmitter {
       this.process.on('exit', (code) => {
         this.emit('log', { level: 'info', message: `[TgProxy] Процесс завершён: code=${code}` })
         this.process = null
+
         if (this._status !== 'stopped') {
-          this._status = 'stopped'
-          this.emit('status', this._status)
+          // Неожиданное завершение — попытка перезапуска
+          if (this._restartCount < this._maxRestarts) {
+            this._restartCount++
+            this.emit('log', {
+              level: 'warn',
+              message: `[TgProxy] Автоматический перезапуск (${this._restartCount}/${this._maxRestarts})...`
+            })
+            this._restartTimeout = setTimeout(() => {
+              this._restartTimeout = null
+              if (this._status !== 'stopped') {
+                this.doSpawn()
+              }
+            }, 2000)
+          } else {
+            this.emit('log', { level: 'error', message: '[TgProxy] Превышено максимальное количество перезапусков' })
+            this._status = 'error'
+            this.emit('status', this._status)
+          }
         }
       })
 
@@ -142,6 +168,11 @@ export class TgProxyEngine extends EventEmitter {
 
   /** Остановить TgWsProxy */
   async stop(): Promise<void> {
+    if (this._restartTimeout) {
+      clearTimeout(this._restartTimeout)
+      this._restartTimeout = null
+    }
+
     if (!this.process) {
       this._status = 'stopped'
       this.emit('status', this._status)
