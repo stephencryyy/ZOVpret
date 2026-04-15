@@ -13,6 +13,23 @@ import { randomBytes } from 'crypto'
 
 export type TgProxyStatus = 'stopped' | 'starting' | 'running' | 'error'
 
+/**
+ * Убить любые осиротевшие TgWsProxy по имени образа.
+ * Safety-net на случай падения Electron без graceful shutdown —
+ * иначе процесс висит в памяти, занимает порт 1443 и может мешать
+ * сетевым проверкам античитов.
+ */
+export function killOrphanTgProxy(): void {
+  const names = ['TgWsProxy_windows.exe', 'TgWsProxy.exe', 'tg-ws-proxy.exe']
+  for (const name of names) {
+    try {
+      execSync(`taskkill /F /IM ${name} /T`, { windowsHide: true, timeout: 3000, stdio: 'ignore' })
+    } catch {
+      // нет процесса — это ОК
+    }
+  }
+}
+
 export interface TgProxyInfo {
   status: TgProxyStatus
   host: string
@@ -145,6 +162,8 @@ export class TgProxyEngine extends EventEmitter {
     if (!this.process) {
       this._status = 'stopped'
       this.emit('status', this._status)
+      // Safety-net даже без трекнутого процесса — на случай осиротевших.
+      killOrphanTgProxy()
       return
     }
 
@@ -153,21 +172,25 @@ export class TgProxyEngine extends EventEmitter {
     this.emit('status', this._status)
 
     return new Promise((resolve) => {
+      const finalize = (): void => {
+        killOrphanTgProxy()
+        this.process = null
+        resolve()
+      }
+
       const timeout = setTimeout(() => {
         if (this.process && pid) {
           try {
             execSync(`taskkill /PID ${pid} /F /T`, { windowsHide: true })
           } catch { /* ignore */ }
-          this.process = null
         }
-        resolve()
+        finalize()
       }, 3000)
 
       if (this.process) {
         this.process.on('exit', () => {
           clearTimeout(timeout)
-          this.process = null
-          resolve()
+          finalize()
         })
         try {
           this.process.kill('SIGTERM')
@@ -179,7 +202,7 @@ export class TgProxyEngine extends EventEmitter {
         }
       } else {
         clearTimeout(timeout)
-        resolve()
+        finalize()
       }
     })
   }

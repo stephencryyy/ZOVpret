@@ -6,9 +6,23 @@ import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { ZapretEngine } from './zapret-engine'
-import { TgProxyEngine } from './tg-proxy-engine'
+import { ZapretEngine, killOrphanWinws, stopWinDivertService } from './zapret-engine'
+import { TgProxyEngine, killOrphanTgProxy } from './tg-proxy-engine'
 import { registerIpcHandlers } from './ipc-handlers'
+
+/**
+ * Полная системная зачистка: убивает winws.exe, TgWsProxy и выгружает
+ * драйвер WinDivert. Вызывается при старте (чтобы убрать следы краха
+ * прошлой сессии) и при выходе (чтобы BattlEye/EAC не видели драйвер).
+ *
+ * Без этой очистки PUBG и другие игры с BattlEye залипают на «вечной
+ * инициализации», пока пользователь вручную не удалит %LOCALAPPDATA%\BattlEye.
+ */
+function fullSystemCleanup(): void {
+  killOrphanWinws()
+  killOrphanTgProxy()
+  stopWinDivertService()
+}
 
 let mainWindow: BrowserWindow | null = null
 
@@ -92,6 +106,12 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.zovpret.app')
 
+  // Превентивная зачистка: если прошлый запуск упал без корректного выхода,
+  // в системе могли остаться winws.exe и загруженный WinDivert-драйвер —
+  // это ломает запуск игр с BattlEye (PUBG). Выметаем до старта движков.
+  console.log('[ZOVpret] Startup cleanup: orphan processes + WinDivert driver')
+  fullSystemCleanup()
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -108,7 +128,8 @@ app.whenReady().then(async () => {
   // IPC для управления окном
   ipcMain.on('window:minimize', () => mainWindow?.minimize())
   ipcMain.on('window:close', () => {
-    Promise.all([engine.stop(), tgProxy.stop()]).finally(() => app.quit())
+    // before-quit сам выполнит cleanup (останов движков + выгрузка WinDivert).
+    app.quit()
   })
 
   // Загружаем UI
@@ -128,13 +149,27 @@ app.whenReady().then(async () => {
     }
   })
 
-  app.on('before-quit', async () => {
-    if (engine.status === 'running') {
-      await engine.stop()
-    }
-    if (tgProxy.status === 'running') {
-      await tgProxy.stop()
-    }
+  // Флаг: уже начали асинхронный shutdown (иначе before-quit запустится дважды
+  // из-за app.exit в конце).
+  let shuttingDown = false
+  app.on('before-quit', (event) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    // Блокируем немедленный выход — даём время остановить процессы
+    // и выгрузить драйвер WinDivert. Иначе BattlEye «видит» драйвер
+    // до следующей перезагрузки и PUBG не стартует.
+    event.preventDefault()
+
+    void (async () => {
+      try {
+        await Promise.allSettled([engine.stop(), tgProxy.stop()])
+      } finally {
+        // Финальный sweep на случай, если stop() не успел по таймауту.
+        fullSystemCleanup()
+        // Выходим напрямую — before-quit больше не должен срабатывать.
+        app.exit(0)
+      }
+    })()
   })
 })
 

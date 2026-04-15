@@ -13,6 +13,40 @@ import { Strategy, buildStrategyArgs } from './strategy-pool'
 
 export type EngineStatus = 'stopped' | 'starting' | 'running' | 'stopping' | 'error'
 
+/** Выполнить системную команду, молча проглотив ошибку (нет процесса / нет сервиса). */
+function execSilent(cmd: string, timeoutMs = 4000): void {
+  try {
+    execSync(cmd, { windowsHide: true, timeout: timeoutMs, stdio: 'ignore' })
+  } catch {
+    // ожидаемо: процесс/сервис отсутствует
+  }
+}
+
+/**
+ * Убить любые осиротевшие winws.exe по имени образа.
+ * Срабатывает как safety-net если Electron упал без graceful shutdown —
+ * иначе процесс остаётся в памяти и BattlEye/PUBG «виснут на инициализации».
+ */
+export function killOrphanWinws(): void {
+  execSilent('taskkill /F /IM winws.exe /T')
+}
+
+/**
+ * Выгрузить драйвер WinDivert (service) из ядра.
+ *
+ * КРИТИЧНО ДЛЯ ИГР С BATTLEYE/EAC (PUBG, Rainbow Six, Fortnite и т.д.):
+ * BattlEye при инициализации сканирует активные kernel-drivers. WinDivert
+ * — общий инструмент для manipulation трафика — флагается как подозрительный,
+ * из-за чего игра виснет на «вечной инициализации». После `sc stop` драйвер
+ * выгружается и античит снова стартует нормально.
+ *
+ * Требует admin (ZOVpret уже его требует для WinDivert).
+ */
+export function stopWinDivertService(): void {
+  execSilent('sc stop WinDivert')
+  execSilent('sc stop WinDivert64')
+}
+
 export interface LogEntry {
   timestamp: number
   level: 'info' | 'warn' | 'error' | 'debug'
@@ -93,6 +127,10 @@ export class ZapretEngine extends EventEmitter {
       this.setStatus('error')
       throw new Error('Бинарники zapret не найдены')
     }
+
+    // Подчищаем осиротевшие winws.exe от предыдущей сессии (если Electron упал).
+    // Без этого параллельно крутятся 2 winws и WinDivert может не освободиться.
+    killOrphanWinws()
 
     this.setStatus('starting')
     this._currentStrategy = strategy
@@ -218,6 +256,10 @@ export class ZapretEngine extends EventEmitter {
     }
 
     if (!this.process) {
+      // Процесса нет, но драйвер WinDivert мог остаться загруженным от прошлой
+      // сессии, либо завис осиротевший winws.exe — всё равно чистим систему.
+      killOrphanWinws()
+      stopWinDivertService()
       this.setStatus('stopped')
       return
     }
@@ -228,6 +270,19 @@ export class ZapretEngine extends EventEmitter {
     const pid = this.process.pid
 
     return new Promise((resolve) => {
+      const finalize = (msg: string): void => {
+        // Safety-net: бьём по имени образа — убивает и трекнутый PID,
+        // и любые осиротевшие winws.exe (например, от предыдущего краха).
+        killOrphanWinws()
+        // Выгружаем драйвер WinDivert — иначе BattlEye/EAC считают систему
+        // скомпрометированной и блокируют запуск игры («вечная инициализация»).
+        stopWinDivertService()
+        this.process = null
+        this.setStatus('stopped')
+        this.log('info', msg)
+        resolve()
+      }
+
       const timeout = setTimeout(() => {
         // Force kill если не остановился за 5 секунд
         if (this.process && pid) {
@@ -236,20 +291,14 @@ export class ZapretEngine extends EventEmitter {
           } catch {
             // ignore
           }
-          this.process = null
         }
-        this.setStatus('stopped')
-        this.log('info', 'Zapret остановлен (force kill)')
-        resolve()
+        finalize('Zapret остановлен (force kill)')
       }, 5000)
 
       if (this.process) {
         this.process.on('exit', () => {
           clearTimeout(timeout)
-          this.process = null
-          this.setStatus('stopped')
-          this.log('info', 'Zapret остановлен')
-          resolve()
+          finalize('Zapret остановлен')
         })
 
         // Попробуем graceful shutdown
@@ -266,8 +315,7 @@ export class ZapretEngine extends EventEmitter {
         }
       } else {
         clearTimeout(timeout)
-        this.setStatus('stopped')
-        resolve()
+        finalize('Zapret остановлен')
       }
     })
   }
