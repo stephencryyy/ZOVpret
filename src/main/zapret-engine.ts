@@ -9,9 +9,107 @@ import { spawn, ChildProcess, execSync } from 'child_process'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { EventEmitter } from 'events'
+import { promises as dnsPromises } from 'dns'
 import { Strategy, buildStrategyArgs } from './strategy-pool'
 
 export type EngineStatus = 'stopped' | 'starting' | 'running' | 'stopping' | 'error'
+
+// ─── Auto-bypass игровых серверов ─────────────────────────────────────────
+// Домены, IP которых резолвятся и исключаются из захвата WinDivert.
+// Пакеты к этим серверам идут мимо winws.exe → нет re-injection latency,
+// нет таймаутов UserProxyApi/CareerApi/ReportPingData у PUBG и аналогичных.
+const GAME_DOMAINS = [
+  // PUBG / Krafton
+  'api.pubg.com',
+  'report-api.pubg.com',
+  'prod.pubg.com',
+  'prod-live-front.playbattlegrounds.com',
+  'ki.playbattlegrounds.com',
+  // Steam
+  'api.steampowered.com',
+  'store.steampowered.com',
+  'community.steampowered.com',
+  // Battle.net / Blizzard
+  'us.actual.battle.net',
+  'eu.actual.battle.net',
+  // Epic Games
+  'api.epicgames.dev',
+  'www.epicgames.com',
+]
+
+const DNS_TIMEOUT_MS = 3000
+
+/** Разрезолвить домены в A-записи с общим дедлайном. Не кидает ошибок. */
+async function resolveGameIps(): Promise<string[]> {
+  const collected = new Set<string>()
+
+  const work = Promise.allSettled(
+    GAME_DOMAINS.map(async (d) => {
+      try {
+        const addrs = await dnsPromises.resolve4(d)
+        addrs.forEach((a) => collected.add(a))
+      } catch {
+        /* unresolved → просто пропускаем */
+      }
+    })
+  )
+
+  await Promise.race([
+    work,
+    new Promise((resolve) => setTimeout(resolve, DNS_TIMEOUT_MS)),
+  ])
+
+  return Array.from(collected)
+}
+
+/** Построить условие на диапазон/список портов для WinDivert-фильтра. */
+function portsToFilter(ports: string, proto: 'tcp' | 'udp'): string {
+  const parts = ports.split(',').map((p) => {
+    if (p.includes('-')) {
+      const [lo, hi] = p.split('-')
+      return `(${proto}.DstPort >= ${lo} and ${proto}.DstPort <= ${hi})`
+    }
+    return `${proto}.DstPort == ${p}`
+  })
+  return parts.length > 1 ? '(' + parts.join(' or ') + ')' : parts[0]
+}
+
+/**
+ * Заменить `--wf-tcp=X` / `--wf-udp=Y` на `--wf-raw=...` с исключением
+ * IP-адресов игровых серверов. WinDivert не перехватывает эти пакеты —
+ * они идут по стандартному сетевому пути без прохождения через winws.exe.
+ */
+function applyGameBypass(args: string[], excludedIps: string[]): string[] {
+  if (excludedIps.length === 0) return args
+
+  let wfTcp: string | null = null
+  let wfUdp: string | null = null
+  const out: string[] = []
+
+  for (const a of args) {
+    if (a.startsWith('--wf-tcp=')) {
+      wfTcp = a.slice('--wf-tcp='.length)
+      continue
+    }
+    if (a.startsWith('--wf-udp=')) {
+      wfUdp = a.slice('--wf-udp='.length)
+      continue
+    }
+    out.push(a)
+  }
+
+  if (!wfTcp && !wfUdp) return args
+
+  const captureConds: string[] = []
+  if (wfTcp) captureConds.push(`(tcp and ${portsToFilter(wfTcp, 'tcp')})`)
+  if (wfUdp) captureConds.push(`(udp and ${portsToFilter(wfUdp, 'udp')})`)
+
+  const exclusion = excludedIps.map((ip) => `ip.DstAddr == ${ip}`).join(' or ')
+  const rawFilter = `(${captureConds.join(' or ')}) and not (${exclusion})`
+
+  out.push(`--wf-raw=${rawFilter}`)
+  return out
+}
 
 /** Выполнить системную команду, молча проглотив ошибку (нет процесса / нет сервиса). */
 function execSilent(cmd: string, timeoutMs = 4000): void {
@@ -144,13 +242,32 @@ export class ZapretEngine extends EventEmitter {
   /** Спавн процесса winws.exe */
   private async spawnProcess(strategy: Strategy): Promise<void> {
     const winwsPath = join(this.binPath, 'winws.exe')
-    
+
     // Подставляем реальные пути в аргументы
-    const args = buildStrategyArgs(
+    let args = buildStrategyArgs(
       strategy,
       this.binPath + '\\',
       this.listsPath + '\\'
     )
+
+    // Game bypass: резолвим IP PUBG/Steam/Epic/etc и исключаем их из
+    // WinDivert-захвата через --wf-raw. Это устраняет таймауты игровых API
+    // (`UserProxyApi@ReportPingData` и т.п.) при активном ZOVpret,
+    // поскольку пакеты игр вообще не попадают в winws.exe.
+    try {
+      const gameIps = await resolveGameIps()
+      if (gameIps.length > 0) {
+        args = applyGameBypass(args, gameIps)
+        this.log(
+          'info',
+          `Game bypass: исключены ${gameIps.length} IP игровых серверов из WinDivert`
+        )
+      } else {
+        this.log('warn', 'Game bypass: не удалось разрезолвить ни одного домена — продолжаем без исключений')
+      }
+    } catch (err: any) {
+      this.log('warn', `Game bypass: ошибка резолва — ${err.message}`)
+    }
 
     this.log('debug', `Команда: ${winwsPath} ${args.join(' ')}`)
 
