@@ -1,0 +1,71 @@
+# Список исключений для игровых сервисов.
+# ZOVpret-управляемый файл — НЕ перезаписывается при нажатии «Обновить»
+# (в отличие от list-exclude.txt, который тянется из Flowseal upstream).
+#
+# Домены из этого списка НЕ проходят через DPI-десинк winws.exe, что
+# предотвращает таймауты игровых API (например, PUBG UserProxyApi,
+# Steam client API, Battle.net launcher и т.д.).
+
+# ─── PUBG / Krafton ────────────────────────────────────────────────
+pubg.com
+playbattlegrounds.com
+krafton.com
+pubgmobile.com
+pubg.report
+
+# ─── Steam / Valve ─────────────────────────────────────────────────
+steampowered.com
+steamcommunity.com
+steamstatic.com
+steamusercontent.com
+steamcontent.com
+valvesoftware.com
+steamgames.com
+
+# ─── Epic Games / Unreal (уже есть в list-exclude.txt, дублируем для
+#     надёжности на случай upstream-изменений) ──────────────────────
+epicgames.com
+epicgames.dev
+unrealengine.com
+epicgamescdn.com
+
+# ─── Battle.net / Blizzard ─────────────────────────────────────────
+battle.net
+blizzard.com
+blizzardcdn.com
+battlenet.com.cn
+
+# ─── EA / Origin ───────────────────────────────────────────────────
+ea.com
+origin.com
+dm.origin.com
+eaassets.com
+easports.com
+
+# ─── Ubisoft / Connect ─────────────────────────────────────────────
+ubisoft.com
+ubi.com
+ubisoftconnect.com
+ubisoftgameservices.com
+
+# ─── Rockstar / Social Club ────────────────────────────────────────
+rockstargames.com
+socialclub.rockstargames.com
+rsg.sc
+
+# ─── BattlEye / EAC (античиты — не трогаем их сетевой трафик) ──────
+battleye.com
+ba.battleye.com
+easyanticheat.net
+
+# ─── Sony / PlayStation Network (для PS-игр через PC) ──────────────
+playstation.net
+sonyentertainmentnetwork.com
+
+# ─── Прочие крупные издатели ───────────────────────────────────────
+2kgames.com
+take2games.com
+bethesda.net
+beth.games
+rockstargames.com
+wargaming.net

@@ -43,6 +43,10 @@ const UDP_QUIC_BLOCK = [
   '--hostlist={LISTS}list-general-user.txt',
   '--hostlist-exclude={LISTS}list-exclude.txt',
   '--hostlist-exclude={LISTS}list-exclude-user.txt',
+  // list-exclude-games.txt — shipping-список игровых сервисов (PUBG, Steam,
+  // Battle.net и т.д.). Защищает игровой трафик от DPI-десинка, не зависит
+  // от Flowseal-обновления (updater его не трогает).
+  '--hostlist-exclude={LISTS}list-exclude-games.txt',
   '--ipset-exclude={LISTS}ipset-exclude.txt',
   '--ipset-exclude={LISTS}ipset-exclude-user.txt',
 ]
@@ -61,6 +65,8 @@ const HOSTLIST_GENERAL_TCP = [
   '--hostlist={LISTS}list-general-user.txt',
   '--hostlist-exclude={LISTS}list-exclude.txt',
   '--hostlist-exclude={LISTS}list-exclude-user.txt',
+  // См. UDP_QUIC_BLOCK — тот же ship-list для игровых сервисов.
+  '--hostlist-exclude={LISTS}list-exclude-games.txt',
   '--ipset-exclude={LISTS}ipset-exclude.txt',
   '--ipset-exclude={LISTS}ipset-exclude-user.txt',
 ]
