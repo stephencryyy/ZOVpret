@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { ZapretEngine } from './zapret-engine'
 import { TgProxyEngine } from './tg-proxy-engine'
+import { AppUpdater } from './app-updater'
 import { SmartStart } from './smart-start'
 import { STRATEGIES, getStrategyById } from './strategy-pool'
 import { getConfig, setConfig } from './config-store'
@@ -19,6 +20,7 @@ import { checkForUpdate, performUpdate, areBinariesInstalled } from './updater'
 export function registerIpcHandlers(
   engine: ZapretEngine,
   tgProxy: TgProxyEngine,
+  appUpdater: AppUpdater,
   resourcesPath: string,
   getMainWindow: () => BrowserWindow | null
 ): void {
@@ -249,6 +251,29 @@ export function registerIpcHandlers(
     }))
 
     return results
+  })
+
+  // ─── Автообновление приложения ───────────────────────────────
+  ipcMain.handle('app-update:check', async () => {
+    await appUpdater.checkNow()
+    return appUpdater.state
+  })
+
+  ipcMain.handle('app-update:download', async () => {
+    await appUpdater.downloadUpdate()
+    return appUpdater.state
+  })
+
+  ipcMain.handle('app-update:install', () => {
+    appUpdater.quitAndInstall()
+  })
+
+  ipcMain.handle('app-update:state', () => appUpdater.state)
+
+  // Пробрасываем события обновления приложения в renderer
+  appUpdater.on('state', (state) => {
+    const win = getMainWindow()
+    if (win) win.webContents.send('app-update:state-changed', state)
   })
 
   // ─── Пробрасываем события движка в Renderer ─────────────────

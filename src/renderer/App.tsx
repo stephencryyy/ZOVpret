@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import TitleBar from './components/TitleBar'
 import MainScreen from './components/MainScreen'
 import SettingsPanel from './components/SettingsPanel'
+import UpdateBanner, { AppUpdateState } from './components/UpdateBanner'
 import { Settings, RefreshCw } from 'lucide-react'
 
 type Status = 'disconnected' | 'analyzing' | 'connecting' | 'connected' | 'error'
@@ -50,6 +51,8 @@ const App: React.FC = () => {
   const [smartStartProgress, setSmartStartProgress] = useState<SmartStartProgress | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'updating' | 'done' | 'error'>('idle')
+  const [appUpdateState, setAppUpdateState] = useState<AppUpdateState | null>(null)
+  const [appUpdateDismissed, setAppUpdateDismissed] = useState(false)
 
   const uptimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
@@ -145,10 +148,26 @@ const App: React.FC = () => {
       })
     })
 
+    // Подписка на состояние автообновления приложения
+    const unsubAppUpdate = (window as any).api?.onAppUpdateStateChange?.((state: AppUpdateState) => {
+      setAppUpdateState(state)
+      // Если пришло новое обновление — показываем баннер
+      if (state.status === 'available' || state.status === 'downloading' ||
+          state.status === 'downloaded' || state.status === 'error') {
+        setAppUpdateDismissed(false)
+      }
+    })
+
+    // Получаем начальное состояние обновления
+    ;(window as any).api?.getAppUpdateState?.().then((state: AppUpdateState) => {
+      if (state) setAppUpdateState(state)
+    }).catch(() => {})
+
     return () => {
       unsubStatus?.()
       unsubLog?.()
       unsubProgress?.()
+      unsubAppUpdate?.()
       if (uptimeIntervalRef.current) clearInterval(uptimeIntervalRef.current)
     }
   }, [])
@@ -244,6 +263,15 @@ const App: React.FC = () => {
   return (
     <div className="app-container">
       <TitleBar />
+
+      {/* Баннер обновления приложения */}
+      <UpdateBanner
+        state={appUpdateDismissed ? null : appUpdateState}
+        onDownload={() => (window as any).api?.downloadAppUpdate?.()}
+        onInstall={() => (window as any).api?.installAppUpdate?.()}
+        onDismiss={() => setAppUpdateDismissed(true)}
+      />
+
 
       <MainScreen
         status={status}

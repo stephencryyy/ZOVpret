@@ -1,6 +1,6 @@
 {
   "name": "zovpret",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "ZOVpret — Расширенная GUI-оболочка для обхода DPI на базе zapret",
   "main": "./out/main/index.js",
   "author": "ZOVpret Team",
@@ -12,12 +12,14 @@
     "start": "electron-vite preview",
     "pack:win": "electron-vite build && electron-builder --win --x64",
     "pack:portable": "electron-vite build && electron-builder --win portable --x64",
+    "release": "electron-vite build && electron-builder --win --x64 --publish always",
     "postinstall": "electron-builder install-app-deps",
     "lint": "eslint . --ext .ts,.tsx"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.3",
     "framer-motion": "^11.18.0",
     "lucide-react": "^1.7.0"
   },
@@ -65,6 +67,11 @@
       "oneClick": true,
       "perMachine": true,
       "allowElevation": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "stephencryyy",
+      "repo": "ZOVpret"
     }
   }
 }

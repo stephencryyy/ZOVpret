@@ -8,6 +8,7 @@ import { existsSync, mkdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { ZapretEngine } from './zapret-engine'
 import { TgProxyEngine } from './tg-proxy-engine'
+import { AppUpdater } from './app-updater'
 import { registerIpcHandlers } from './ipc-handlers'
 import { getConfig, setConfig } from './config-store'
 
@@ -158,6 +159,7 @@ app.whenReady().then(async () => {
   const resourcesPath = getResourcesPath()
   const engine = new ZapretEngine(resourcesPath)
   const tgProxy = new TgProxyEngine(resourcesPath)
+  const appUpdater = new AppUpdater()
 
   createWindow()
 
@@ -173,7 +175,12 @@ app.whenReady().then(async () => {
   }
 
   // Регистрируем IPC
-  registerIpcHandlers(engine, tgProxy, resourcesPath, () => mainWindow)
+  registerIpcHandlers(engine, tgProxy, appUpdater, resourcesPath, () => mainWindow)
+
+  // Запускаем периодическую проверку обновлений (только в prod)
+  if (!is.dev) {
+    appUpdater.startPeriodicCheck()
+  }
 
   // IPC для управления окном
   ipcMain.on('window:minimize', () => mainWindow?.minimize())

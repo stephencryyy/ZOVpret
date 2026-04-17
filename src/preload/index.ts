@@ -70,6 +70,25 @@ const api = {
   testConnection: () =>
     ipcRenderer.invoke('engine:test-connection'),
 
+  // ─── Автообновление приложения ───────────────────────────────
+  checkAppUpdate: () =>
+    ipcRenderer.invoke('app-update:check'),
+
+  downloadAppUpdate: () =>
+    ipcRenderer.invoke('app-update:download'),
+
+  installAppUpdate: () =>
+    ipcRenderer.invoke('app-update:install'),
+
+  getAppUpdateState: () =>
+    ipcRenderer.invoke('app-update:state'),
+
+  onAppUpdateStateChange: (callback: (state: any) => void) => {
+    const handler = (_event: any, state: any) => callback(state)
+    ipcRenderer.on('app-update:state-changed', handler)
+    return () => ipcRenderer.removeListener('app-update:state-changed', handler)
+  },
+
   // ─── Управление окном ───────────────────────────────────────
   minimizeWindow: () =>
     ipcRenderer.send('window:minimize'),
