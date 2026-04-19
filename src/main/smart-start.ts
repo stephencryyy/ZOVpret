@@ -3,7 +3,7 @@
 // ============================================================================
 // Последовательно тестирует стратегии из пула, делая HTTPS-запросы к тестовым
 // доменам через запущенный winws.exe. Ищет стратегию с максимальным покрытием
-// всех целевых сервисов (YouTube, Discord, Telegram, Instagram, X).
+// заблокированных сервисов (YouTube, Discord, Telegram, Instagram, X).
 // ============================================================================
 
 import { EventEmitter } from 'events'
@@ -24,8 +24,13 @@ const TEST_URLS = [
 /** Таймаут на тест одной стратегии — глубокий анализ (мс) */
 const TEST_TIMEOUT_DEEP = 8000
 
-/** Таймаут на тест одной стратегии — быстрый авто-режим (мс) */
-const TEST_TIMEOUT_FAST = 4000
+/** Таймаут на тест одной стратегии — быстрый авто-режим (мс).
+ *  6000 выбрано как компромисс: достаточно для fake-packet retries + TLS handshake,
+ *  но не слишком долго чтобы цикл из 20 стратегий укладывался в разумное время. */
+const TEST_TIMEOUT_FAST = 6000
+
+/** Таймаут для baseline-проверки (без winws) — короче, т.к. сеть чистая */
+const BASELINE_TIMEOUT = 5000
 
 /** Задержка после первого запуска winws (мс) — WinDivert загружается в ядро */
 const START_DELAY_FIRST = 2500
@@ -68,23 +73,26 @@ export class SmartStart extends EventEmitter {
   /**
    * Запускает процесс автоматического подбора стратегии.
    *
-   * Auto (быстрый): ищет первую стратегию, покрывающую ВСЕ заблокированные домены.
-   *   Если идеальной нет — берёт лучшую по score. Таймаут 4сек, уменьшенные задержки.
+   * Auto (быстрый): ищет первую стратегию, разблокирующую ВСЕ заблокированные на
+   *   baseline домены. Если идеальной нет — берёт лучшую по relevantScore.
+   *   Таймаут 6сек, уменьшенные задержки.
    *
-   * Deep (глубокий): тестирует все стратегии, выбирает лучшую по score + latency.
-   *   Таймаут 8сек, полные задержки.
+   * Deep (глубокий): тестирует все 20 стратегий, выбирает лучшую по
+   *   relevantScore + средней задержке. Таймаут 8сек, полные задержки.
    */
   async run(deepAnalysis: boolean = false): Promise<SmartStartResult> {
     this.aborted = false
     const total = STRATEGIES.length
     const testTimeout = deepAnalysis ? TEST_TIMEOUT_DEEP : TEST_TIMEOUT_FAST
 
-    let bestStrategy: Strategy | null = null
-    let bestScore = -1
-    let bestLatency = Infinity
-    let bestDomainResults: DomainResult[] = []
-
     // ─── Baseline: проверяем какие домены заблокированы БЕЗ winws ────
+    // Важно: движок может быть уже запущен (например, предыдущая стратегия).
+    // Останавливаем его перед baseline, чтобы получить чистую картину.
+    try {
+      await this.engine.stop()
+      await this.delay(500)
+    } catch { /* ignore */ }
+
     this.emit('progress', {
       current: 0,
       total,
@@ -92,13 +100,14 @@ export class SmartStart extends EventEmitter {
       status: 'baseline'
     } as SmartStartProgress)
 
-    const baseline = await this.testConnection(TEST_TIMEOUT_FAST)
-    const blockedUrls = TEST_URLS.filter(
-      (_, i) => !baseline.domainResults[i].success
-    )
+    const baseline = await this.testConnection(BASELINE_TIMEOUT)
+    // Индексы доменов, которые ЗАБЛОКИРОВАНЫ на baseline (не открылись без winws)
+    const blockedIdx: number[] = baseline.domainResults
+      .map((r, i) => r.success ? -1 : i)
+      .filter(i => i !== -1)
 
     // Если все домены доступны без обхода — нечего обходить
-    if (blockedUrls.length === 0) {
+    if (blockedIdx.length === 0) {
       return {
         success: false,
         strategy: null,
@@ -109,16 +118,26 @@ export class SmartStart extends EventEmitter {
       }
     }
 
-    const maxScore = blockedUrls.length
+    const blockedCount = blockedIdx.length
     this.emit('progress', {
       current: 0,
       total,
-      strategyName: `Заблокировано ${maxScore} из ${TEST_URLS.length} доменов`,
+      strategyName: `Заблокировано ${blockedCount} из ${TEST_URLS.length} доменов`,
       status: 'baseline',
       domainResults: baseline.domainResults
     } as SmartStartProgress)
 
     // ─── Перебор стратегий ──────────────────────────────────────────
+    // Оценки: relevantScore = сколько из ЗАБЛОКИРОВАННЫХ на baseline
+    //   доменов стратегия смогла разблокировать.
+    //   totalScore = сколько всего доменов работает через стратегию
+    //   (включая те, которые работали и без winws).
+    let bestStrategy: Strategy | null = null
+    let bestRelevantScore = -1
+    let bestTotalScore = -1
+    let bestLatency = Infinity
+    let bestDomainResults: DomainResult[] = []
+
     for (let i = 0; i < STRATEGIES.length; i++) {
       if (this.aborted) break
 
@@ -151,41 +170,49 @@ export class SmartStart extends EventEmitter {
         }
 
         // 4. Тестировать HTTPS-запросы к доменам параллельно
-        const { score, avgLatency, domainResults } = await this.testConnection(testTimeout)
+        const { avgLatency, domainResults } = await this.testConnection(testTimeout)
 
-        if (score > 0) {
-          // Стратегия работает хотя бы для одного сайта
-          if (score > bestScore || (score === bestScore && avgLatency < bestLatency)) {
-            bestScore = score
-            bestLatency = avgLatency
-            bestStrategy = strategy
-            bestDomainResults = domainResults
-          }
+        // Считаем relevantScore (только из заблокированных на baseline)
+        const relevantScore = blockedIdx.filter(idx => domainResults[idx].success).length
+        const totalScore = domainResults.filter(d => d.success).length
 
-          // Fast-track: если не нужен глубокий анализ и найдена идеальная стратегия
-          // (покрывает ВСЕ домены), останавливаемся сразу.
-          if (!deepAnalysis && score >= TEST_URLS.length) {
-            this.emit('progress', {
-              current: i + 1,
-              total,
-              strategyName: strategy.name,
-              status: 'success',
-              domainResults
-            })
-            setConfig({ lastStrategyId: strategy.id })
-            return {
-              success: true,
-              strategy,
-              latencyMs: avgLatency,
-              score,
-              domainResults
-            }
+        // Обновляем лучшую стратегию, если она даёт больше покрытия
+        const isBetter =
+          relevantScore > bestRelevantScore ||
+          (relevantScore === bestRelevantScore && totalScore > bestTotalScore) ||
+          (relevantScore === bestRelevantScore && totalScore === bestTotalScore && avgLatency < bestLatency)
+
+        if (isBetter && (relevantScore > 0 || totalScore > 0)) {
+          bestRelevantScore = relevantScore
+          bestTotalScore = totalScore
+          bestLatency = avgLatency
+          bestStrategy = strategy
+          bestDomainResults = domainResults
+        }
+
+        // Fast-track: в авто-режиме — если стратегия разблокировала ВСЕ
+        // заблокированные домены, берём её сразу без дальнейшего перебора.
+        if (!deepAnalysis && relevantScore >= blockedCount) {
+          this.emit('progress', {
+            current: i + 1,
+            total,
+            strategyName: strategy.name,
+            status: 'success',
+            domainResults
+          })
+          setConfig({ lastStrategyId: strategy.id })
+          return {
+            success: true,
+            strategy,
+            latencyMs: avgLatency,
+            score: totalScore,
+            domainResults
           }
         }
 
-        // Стратегия не идеальна (или глубокий анализ) — останавливаем и пробуем следующую
+        // Стратегия не идеальна (или идёт глубокий анализ) — останавливаем
         await this.engine.stop()
-        await this.delay(500) // Ждём корректного освобождения WinDivert OS
+        await this.delay(500) // Ждём освобождения WinDivert
 
       } catch (err: any) {
         // Ошибка при тесте — продолжаем со следующей
@@ -197,12 +224,12 @@ export class SmartStart extends EventEmitter {
         })
         try {
           await this.engine.stop()
-          await this.delay(500) // Ждём освобождения
+          await this.delay(500)
         } catch { /* ignore */ }
       }
     }
 
-    // После завершения всех тестов проверяем, нашли ли мы хоть что-то
+    // ─── Итог: выбираем лучшее из найденного ─────────────────────────
     if (bestStrategy) {
       this.emit('progress', {
         current: total,
@@ -214,25 +241,42 @@ export class SmartStart extends EventEmitter {
       setConfig({ lastStrategyId: bestStrategy.id })
       try {
         await this.engine.start(bestStrategy)
-      } catch (err) {
-        // ignore
-      }
+      } catch { /* ignore */ }
       return {
         success: true,
         strategy: bestStrategy,
         latencyMs: bestLatency,
-        score: bestScore,
+        score: bestTotalScore,
         domainResults: bestDomainResults
       }
     }
 
-    // Ни одна стратегия не сработала
-    return {
-      success: false,
-      strategy: null,
-      latencyMs: 0,
-      score: 0,
-      error: 'Ни одна из стратегий не сработала. Попробуйте позже или настройте вручную.'
+    // ─── Fallback: ничего не разблокировалось ────────────────────────
+    // Возможные причины: слишком строгая DPI, нестабильная сеть, все тесты
+    // истекли по таймауту. Запускаем первую стратегию (General) как дефолт,
+    // чтобы пользователь мог хоть что-то попробовать вручную.
+    const fallback = STRATEGIES[0]
+    try {
+      await this.engine.start(fallback)
+      setConfig({ lastStrategyId: fallback.id })
+      const notWorkingNames = blockedIdx.map(i => TEST_URLS[i].name).join(', ')
+      return {
+        success: false,
+        strategy: fallback,
+        latencyMs: 0,
+        score: 0,
+        domainResults: baseline.domainResults,
+        error: `Ни одна стратегия не разблокировала: ${notWorkingNames}. Активирована ${fallback.name} — попробуйте выбрать другую стратегию вручную в настройках.`
+      }
+    } catch {
+      return {
+        success: false,
+        strategy: null,
+        latencyMs: 0,
+        score: 0,
+        domainResults: baseline.domainResults,
+        error: 'Ни одна из стратегий не сработала. Проверьте подключение к интернету или выберите стратегию вручную.'
+      }
     }
   }
 
@@ -280,11 +324,13 @@ export class SmartStart extends EventEmitter {
   ): Promise<{ success: boolean; latencyMs: number }> {
     return new Promise((resolve) => {
       const start = Date.now()
+      let req: ReturnType<typeof https.get> | null = null
       const timer = setTimeout(() => {
+        try { req?.destroy() } catch { /* ignore */ }
         resolve({ success: false, latencyMs: timeout })
       }, timeout)
 
-      const req = https.get(
+      req = https.get(
         {
           hostname,
           path,
