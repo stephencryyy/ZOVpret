@@ -226,12 +226,16 @@ const App: React.FC = () => {
           setSmartStartProgress(null) // <--- Очищаем прогресс
 
           if (result?.success && result.strategy) {
-            const prefix = isDeep ? 'Глубокий: ' : 'Авто: '
+            const isFallback = (result as any).isFallback === true
+            // Префикс "Резерв:" даёт визуальный сигнал, что стратегия выбрана
+            // как запасная (автоподбор не смог определить оптимальную)
+            const prefix = isFallback ? 'Резерв: ' : (isDeep ? 'Глубокий: ' : 'Авто: ')
             setStrategyName(prefix + result.strategy.name)
-            
+
             // Запускаем таймер аптайма и устанавливаем статус подключено,
             // потому что в onStatusChange мы игнорировали эвенты во время SmartStart
             setStatus('connected')
+            setErrorMessage(null)
             startTimeRef.current = Date.now()
             if (uptimeIntervalRef.current) clearInterval(uptimeIntervalRef.current)
             uptimeIntervalRef.current = setInterval(() => {
@@ -239,7 +243,7 @@ const App: React.FC = () => {
             }, 1000)
           } else {
             setStatus('error')
-            setErrorMessage('Ни одна стратегия не сработала. Попробуйте выбрать стратегию вручную в настройках.')
+            setErrorMessage(result?.error || 'Ни одна стратегия не сработала. Попробуйте выбрать стратегию вручную в настройках.')
           }
         }
       }

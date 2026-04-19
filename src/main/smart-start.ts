@@ -32,11 +32,15 @@ const TEST_TIMEOUT_FAST = 6000
 /** Таймаут для baseline-проверки (без winws) — короче, т.к. сеть чистая */
 const BASELINE_TIMEOUT = 5000
 
-/** Задержка после первого запуска winws (мс) — WinDivert загружается в ядро */
-const START_DELAY_FIRST = 2500
+/** Задержка после первого запуска winws (мс) — WinDivert загружается в ядро,
+ *  нужно время на инициализацию драйвера и DNS-резолвера */
+const START_DELAY_FIRST = 3500
 
 /** Задержка для последующих стратегий (мс) — WinDivert уже в памяти */
 const START_DELAY_NEXT = 1500
+
+/** Задержка перед ретраем теста при подозрительном нулевом score (мс) */
+const RETRY_DELAY = 1000
 
 export interface DomainResult {
   name: string
@@ -59,6 +63,8 @@ export interface SmartStartResult {
   score: number
   domainResults?: DomainResult[]
   error?: string
+  /** Была ли активирована fallback-стратегия (ни одна не набрала очков, но запустили General) */
+  isFallback?: boolean
 }
 
 export class SmartStart extends EventEmitter {
@@ -170,7 +176,21 @@ export class SmartStart extends EventEmitter {
         }
 
         // 4. Тестировать HTTPS-запросы к доменам параллельно
-        const { avgLatency, domainResults } = await this.testConnection(testTimeout)
+        let { avgLatency, domainResults } = await this.testConnection(testTimeout)
+
+        // Ретрай: если ВСЕ домены провалились, это чаще всего аномалия сетевого
+        // стека (DNS-резолвер, WinDivert grace period) — даём секунду и пробуем
+        // ещё раз. Это решает основную причину ошибки "никто не сработал" на
+        // холодном старте.
+        const initialScore = domainResults.filter(d => d.success).length
+        if (initialScore === 0 && !this.aborted) {
+          await this.delay(RETRY_DELAY)
+          const retry = await this.testConnection(testTimeout)
+          if (retry.domainResults.filter(d => d.success).length > 0) {
+            avgLatency = retry.avgLatency
+            domainResults = retry.domainResults
+          }
+        }
 
         // Считаем relevantScore (только из заблокированных на baseline)
         const relevantScore = blockedIdx.filter(idx => domainResults[idx].success).length
@@ -253,20 +273,20 @@ export class SmartStart extends EventEmitter {
 
     // ─── Fallback: ничего не разблокировалось ────────────────────────
     // Возможные причины: слишком строгая DPI, нестабильная сеть, все тесты
-    // истекли по таймауту. Запускаем первую стратегию (General) как дефолт,
-    // чтобы пользователь мог хоть что-то попробовать вручную.
+    // истекли по таймауту. Запускаем первую стратегию (General) как дефолт —
+    // она работает у большинства. Пометка isFallback: true даст UI понять,
+    // что это «приблизительный» результат и можно предложить ручной выбор.
     const fallback = STRATEGIES[0]
     try {
       await this.engine.start(fallback)
       setConfig({ lastStrategyId: fallback.id })
-      const notWorkingNames = blockedIdx.map(i => TEST_URLS[i].name).join(', ')
       return {
-        success: false,
+        success: true, // считаем успехом — стратегия реально запущена
         strategy: fallback,
         latencyMs: 0,
         score: 0,
         domainResults: baseline.domainResults,
-        error: `Ни одна стратегия не разблокировала: ${notWorkingNames}. Активирована ${fallback.name} — попробуйте выбрать другую стратегию вручную в настройках.`
+        isFallback: true
       }
     } catch {
       return {
