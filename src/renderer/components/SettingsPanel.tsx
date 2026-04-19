@@ -3,7 +3,8 @@
 // ============================================================================
 
 import React, { useState, useEffect } from 'react'
-import { ChevronLeft, Settings2, Target, List, Info, Ghost, Zap, Shuffle, Globe, Plus, X } from 'lucide-react'
+import { ChevronLeft, Settings2, Target, List, Info, Ghost, Zap, Shuffle, Globe, Plus, X, Download, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { AppUpdateState } from './UpdateBanner'
 
 interface Strategy {
   id: string
@@ -20,6 +21,10 @@ interface SettingsPanelProps {
   currentStrategyId: string | null
   onStrategyChange: (id: string) => void
   logs: Array<{ timestamp: number; level: string; message: string }>
+  appUpdateState: AppUpdateState | null
+  onCheckAppUpdate: () => void
+  onDownloadAppUpdate: () => void
+  onInstallAppUpdate: () => void
 }
 
 const LogsTab: React.FC<{
@@ -100,13 +105,216 @@ const LogsTab: React.FC<{
   )
 }
 
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+const AppUpdateSection: React.FC<{
+  state: AppUpdateState | null
+  currentVersion: string
+  onCheck: () => void
+  onDownload: () => void
+  onInstall: () => void
+}> = ({ state, currentVersion, onCheck, onDownload, onInstall }) => {
+  const status = state?.status ?? 'idle'
+  const isChecking = status === 'checking'
+  const isDownloading = status === 'downloading'
+  const isAvailable = status === 'available'
+  const isDownloaded = status === 'downloaded'
+  const isError = status === 'error'
+
+  const statusText = (() => {
+    if (isChecking) return 'Проверка обновлений...'
+    if (isAvailable) return `Доступна версия v${state?.newVersion}`
+    if (isDownloading) return `Скачивание v${state?.newVersion}: ${state?.progress?.percent ?? 0}%`
+    if (isDownloaded) return `Готово. Перезапуск установит v${state?.newVersion}`
+    if (isError) return `Ошибка: ${state?.error?.substring(0, 80) ?? 'неизвестная'}`
+    if (status === 'not-available') return `У вас последняя версия (v${currentVersion})`
+    return `Текущая версия: v${currentVersion}`
+  })()
+
+  const statusColor =
+    isError ? '#fca5a5' :
+    isDownloaded || status === 'not-available' ? '#4ade80' :
+    isAvailable || isDownloading ? '#67e8f9' :
+    'var(--text-muted)'
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section__title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <Download size={14} /> Обновление приложения
+      </div>
+
+      <div style={{
+        padding: '10px 12px',
+        background: 'var(--bg-glass)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '10px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}>
+        {/* Текущий статус */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '11px',
+          color: statusColor,
+          lineHeight: 1.4
+        }}>
+          {isError ? <AlertTriangle size={13} /> :
+           isDownloaded ? <CheckCircle2 size={13} /> :
+           isChecking || isDownloading ? <RefreshCw size={13} className="animate-spin" /> :
+           <Info size={13} />}
+          <span style={{ flex: 1 }}>{statusText}</span>
+        </div>
+
+        {/* Прогресс-бар при скачивании */}
+        {isDownloading && state?.progress && (
+          <>
+            <div style={{
+              height: '4px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              borderRadius: '2px',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                height: '100%',
+                width: `${state.progress.percent}%`,
+                background: 'linear-gradient(90deg, #00e5ff, #00FF41)',
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+            <div style={{
+              fontSize: '9px',
+              color: 'var(--text-muted)',
+              display: 'flex',
+              justifyContent: 'space-between'
+            }}>
+              <span>{formatBytes(state.progress.transferred)} / {formatBytes(state.progress.total)}</span>
+              <span>{formatBytes(state.progress.bytesPerSecond)}/с</span>
+            </div>
+          </>
+        )}
+
+        {/* Кнопки действий */}
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {(status === 'idle' || status === 'not-available' || status === 'error') && (
+            <button
+              onClick={onCheck}
+              disabled={isChecking}
+              style={{
+                flex: 1,
+                padding: '6px 10px',
+                background: 'var(--bg-glass)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: isChecking ? 'default' : 'pointer',
+                fontFamily: 'var(--font-family)',
+                opacity: isChecking ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px'
+              }}
+            >
+              <RefreshCw size={12} /> Проверить обновления
+            </button>
+          )}
+
+          {isChecking && (
+            <button
+              disabled
+              style={{
+                flex: 1,
+                padding: '6px 10px',
+                background: 'var(--bg-glass)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '6px',
+                color: 'var(--text-muted)',
+                fontSize: '11px',
+                fontWeight: 600,
+                fontFamily: 'var(--font-family)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px'
+              }}
+            >
+              <RefreshCw size={12} className="animate-spin" /> Проверка...
+            </button>
+          )}
+
+          {isAvailable && (
+            <button
+              onClick={onDownload}
+              style={{
+                flex: 1,
+                padding: '6px 10px',
+                background: 'var(--accent-gradient)',
+                border: 'none',
+                borderRadius: '6px',
+                color: '#020205',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-family)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px'
+              }}
+            >
+              <Download size={12} /> Скачать v{state?.newVersion}
+            </button>
+          )}
+
+          {isDownloaded && (
+            <button
+              onClick={onInstall}
+              style={{
+                flex: 1,
+                padding: '6px 10px',
+                background: 'var(--accent-gradient)',
+                border: 'none',
+                borderRadius: '6px',
+                color: '#020205',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-family)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px'
+              }}
+            >
+              <CheckCircle2 size={12} /> Перезапустить и установить
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
   isOpen,
   onClose,
   strategies,
   currentStrategyId,
   onStrategyChange,
-  logs
+  logs,
+  appUpdateState,
+  onCheckAppUpdate,
+  onDownloadAppUpdate,
+  onInstallAppUpdate
 }) => {
   const [activeTab, setActiveTab] = useState<'strategies' | 'domains' | 'logs' | 'about'>('strategies')
   const [appVersion, setAppVersion] = useState('...')
@@ -503,6 +711,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   v{appVersion} — GUI для zapret DPI bypass
                 </div>
               </div>
+
+              {/* Секция автообновления приложения */}
+              <AppUpdateSection
+                state={appUpdateState}
+                currentVersion={appVersion}
+                onCheck={onCheckAppUpdate}
+                onDownload={onDownloadAppUpdate}
+                onInstall={onInstallAppUpdate}
+              />
 
               <div className="settings-section">
                 <div className="settings-section__title">Компоненты</div>

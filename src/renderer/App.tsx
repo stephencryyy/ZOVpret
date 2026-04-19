@@ -326,6 +326,13 @@ const App: React.FC = () => {
         currentStrategyId={currentStrategyId}
         onStrategyChange={handleStrategyChange}
         logs={logs}
+        appUpdateState={appUpdateState}
+        onCheckAppUpdate={() => {
+          setAppUpdateDismissed(false)
+          ;(window as any).api?.checkAppUpdate?.()
+        }}
+        onDownloadAppUpdate={() => (window as any).api?.downloadAppUpdate?.()}
+        onInstallAppUpdate={() => (window as any).api?.installAppUpdate?.()}
       />
     </div>
   )

@@ -741,6 +741,19 @@ body {
   animation: fade-in 0.4s ease forwards;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-pulse {
+  animation: icon-pulse 1.5s ease-in-out infinite;
+}
+
 /* ─── Responsive touches ───────────────────────────────────── */
 @media (max-height: 620px) {
   .main-content { gap: 16px; padding: 12px; }
