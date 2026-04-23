@@ -150,19 +150,33 @@ export const STRATEGIES: Strategy[] = [
 
   // ═══════════════════════════════════════════════════════════════
   // 3. Instagram / Meta — Оптимизировано под Instagram/Facebook
+  // Включает полную обработку Discord (QUIC + UDP voice + discord.media TCP)
   // ═══════════════════════════════════════════════════════════════
   {
     id: 'instagram_meta',
     name: 'Instagram / Meta',
-    description: 'Для Instagram, Facebook, WhatsApp. Fake TLS + rndsni + autottl.',
+    description: 'Для Instagram, Facebook, WhatsApp + Discord. Fake TLS + rndsni + autottl.',
     category: 'general',
     args: [
-      '--wf-tcp=80,443', '--wf-udp=443',
-      '--filter-udp=443',
-      ...HOSTLIST_GENERAL_TCP,
+      // Общий фильтр: TCP 80/443 + все необходимые UDP порты
+      // (443 для QUIC, 19294-19344 и 50000-50100 для Discord RTP/STUN)
+      WF_PORTS, WF_UDP,
+      // UDP QUIC для всех заблокированных доменов
+      ...UDP_QUIC_BLOCK,
       '--dpi-desync=fake', '--dpi-desync-repeats=11',
       '--dpi-desync-fake-quic={BIN}quic_initial_www_google_com.bin',
       '--new',
+      // Discord UDP voice/video (RTP + STUN) — критично для голосовых каналов
+      ...DISCORD_UDP_BLOCK,
+      '--new',
+      // Discord TLS-голос через discord.media (TCP 2053/2083/2087/2096/8443)
+      '--filter-tcp=2053,2083,2087,2096,8443',
+      '--hostlist-domains=discord.media',
+      '--dpi-desync=fake,multisplit', '--dpi-desync-split-seqovl=681',
+      '--dpi-desync-split-pos=1',
+      '--dpi-desync-split-seqovl-pattern={BIN}tls_clienthello_www_google_com.bin',
+      '--new',
+      // Meta-специфичная обработка TCP 443 (Instagram/Facebook/WhatsApp)
       '--filter-tcp=443',
       ...HOSTLIST_GENERAL_TCP,
       '--dpi-desync=fake,multidisorder', '--dpi-desync-split-pos=1,midsld',
