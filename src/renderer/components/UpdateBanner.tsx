@@ -59,16 +59,21 @@ const UpdateBanner: React.FC<UpdateBannerProps> = ({
     <AnimatePresence>
       {visible && (
         <motion.div
-          initial={{ y: -60, opacity: 0 }}
+          className="update-banner"
+          initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -60, opacity: 0 }}
+          exit={{ y: -20, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 28 }}
           style={{
+            // Сдвинут ниже titlebar (40px) + зазор 8px, чтобы никак не
+            // перекрывать кнопки закрыть/свернуть
             position: 'absolute',
-            top: '38px',
+            top: '48px',
             left: '8px',
             right: '8px',
-            zIndex: 50,
+            // Ниже titlebar (z-index 100+), чтобы при любых анимациях
+            // кнопки titlebar оставались кликабельными
+            zIndex: 40,
             padding: '10px 12px',
             background: state.status === 'error'
               ? 'rgba(239, 68, 68, 0.15)'

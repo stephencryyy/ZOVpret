@@ -183,6 +183,11 @@ body {
   color: var(--text-secondary);
   cursor: pointer;
   border-radius: 4px;
+  /* Явный no-drag и высокий z-index — чтобы клики по кнопкам
+     не перехватывались родительским drag-регионом или UpdateBanner */
+  -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 101;
   transition: all 0.15s ease;
   font-size: 16px;
 }
@@ -541,6 +546,8 @@ body {
 
 .settings-header__back {
   -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 202;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -785,4 +792,9 @@ button:focus-visible,
 .settings-header__back,
 .titlebar__btn {
   cursor: pointer;
+}
+
+/* UpdateBanner — исключаем из drag-региона, не перехватываем клики titlebar */
+.update-banner {
+  -webkit-app-region: no-drag;
 }
